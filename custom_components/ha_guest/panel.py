@@ -1,7 +1,8 @@
 """The guest panel: a page at /guest that needs no Home Assistant account.
 
 It is the only door for account-less guests, so everything is checked here on every request: the request must
-come from one of the configured networks (never through Home Assistant Cloud), the entity must be on the panel's
+come from one of the configured networks (never through Home Assistant Cloud), carry a link token that has not
+expired when expiring links are on, the entity must be on the panel's
 list, and the action must be one of the few this module knows how to translate into a service call.
 """
 
@@ -25,13 +26,16 @@ from .const import (
     API_STATES_URL,
     CONF_ENABLED,
     CONF_ENTITIES,
+    CONF_SECRET,
     CONF_NETWORKS,
     CONF_PANEL,
     CONF_TITLE,
     DEFAULT_TITLE,
     DOMAIN,
     PANEL_URL,
+    TOKEN_HEADER,
 )
+from .invite import link_seconds, token_expiry
 
 ATTRIBUTES = (
     "brightness", "supported_color_modes", "current_position", "temperature", "current_temperature",
@@ -97,11 +101,11 @@ def resolve_action(state: State, action: Any, value: Any) -> tuple[str, dict[str
 
 
 def panel_config(hass: HomeAssistant) -> dict[str, Any] | None:
-    """The panel settings, or None when the panel is switched off or the integration is not loaded."""
+    """The panel settings (plus the link secret), or None when the panel is off or the integration not loaded."""
     for entry in hass.config_entries.async_loaded_entries(DOMAIN):
         conf = entry.options.get(CONF_PANEL, {})
         if conf.get(CONF_ENABLED):
-            return conf
+            return {**conf, CONF_SECRET: entry.data.get(CONF_SECRET, "")}
     return None
 
 
@@ -138,7 +142,8 @@ def _area_name(hass: HomeAssistant, entity_id: str) -> str | None:
 class _GuestView(HomeAssistantView):
     requires_auth = False
 
-    def _guard(self, request: web.Request) -> tuple[HomeAssistant, dict[str, Any]] | web.Response:
+    def _guard(self, request: web.Request) -> tuple[HomeAssistant, dict[str, Any], int | None] | web.Response:
+        """Return (hass, panel settings, when the guest's link expires), or the response that turns them away."""
         hass = request.app["hass"]
         conf = panel_config(hass)
         if conf is None:
@@ -146,7 +151,12 @@ class _GuestView(HomeAssistantView):
         if not network_allowed(hass, request, conf):
             # The caller's own address helps the owner work out which network to allow.
             return self.json({"error": "network", "ip": request.remote}, HTTPStatus.FORBIDDEN)
-        return hass, conf
+        expires = None
+        if lifetime := link_seconds(conf):
+            expires = token_expiry(conf[CONF_SECRET], request.headers.get(TOKEN_HEADER), lifetime)
+            if expires is None:
+                return self.json({"error": "link"}, HTTPStatus.FORBIDDEN)
+        return hass, conf, expires
 
 
 class GuestPageView(HomeAssistantView):
@@ -180,7 +190,7 @@ class GuestStatesView(_GuestView):
         guard = self._guard(request)
         if isinstance(guard, web.Response):
             return guard
-        hass, conf = guard
+        hass, conf, expires = guard
         entities = []
         for entity_id in conf.get(CONF_ENTITIES, []):
             if (state := hass.states.get(entity_id)) is None:
@@ -192,7 +202,7 @@ class GuestStatesView(_GuestView):
                 "area": _area_name(hass, entity_id),
                 "attributes": {k: state.attributes[k] for k in ATTRIBUTES if k in state.attributes},
             })
-        return self.json({"title": conf.get(CONF_TITLE) or DEFAULT_TITLE, "entities": entities})
+        return self.json({"title": conf.get(CONF_TITLE) or DEFAULT_TITLE, "expires": expires, "entities": entities})
 
 
 class GuestActionView(_GuestView):
@@ -203,7 +213,7 @@ class GuestActionView(_GuestView):
         guard = self._guard(request)
         if isinstance(guard, web.Response):
             return guard
-        hass, conf = guard
+        hass, conf, _ = guard
         # Requiring JSON keeps other websites the guest visits from posting here with a plain form.
         if request.content_type != "application/json":
             return self.json({"error": "invalid"}, HTTPStatus.BAD_REQUEST)

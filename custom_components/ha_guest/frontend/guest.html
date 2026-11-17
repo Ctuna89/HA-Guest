@@ -44,6 +44,7 @@
   .value { min-width: 64px; text-align: center; font-weight: 600; }
   .notice { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 28px 20px; text-align: center; }
   .notice p { color: var(--muted); margin: 8px 0 0; }
+  #expiry { color: var(--muted); font-size: 13px; text-align: center; margin: 24px 0 0; }
   #toast {
     position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #b91c1c; color: #fff;
     padding: 10px 16px; border-radius: 12px; opacity: 0; transition: opacity .2s; pointer-events: none;
@@ -55,6 +56,7 @@
 <main>
   <h1 id="title"></h1>
   <div id="content"></div>
+  <p id="expiry"></p>
 </main>
 <div id="toast" role="alert"></div>
 <script>
@@ -69,6 +71,8 @@
     wifi_text: "Este panel solo funciona desde la red de la casa.", your_ip: "Tu dirección: ",
     off_title: "Panel no disponible", off_text: "El panel de invitados está desactivado.",
     empty: "Todavía no hay nada para manejar aquí.", offline: "Sin conexión. Reintentando…",
+    link_title: "Este enlace ya no es válido",
+    link_text: "Pide al dueño de casa un código QR nuevo y escanéalo.", until: "Acceso hasta ",
   } : {
     on: "On", off: "Off", turn_on: "Turn on", turn_off: "Turn off", open: "Open", close: "Close",
     stop: "Stop", activate: "Activate", lock: "Lock", unlock: "Unlock", locked: "Locked", unlocked: "Unlocked",
@@ -78,6 +82,8 @@
     wifi_text: "This panel only works from the home network.", your_ip: "Your address: ",
     off_title: "Panel unavailable", off_text: "The guest panel is switched off.",
     empty: "Nothing to control here yet.", offline: "Offline. Retrying…",
+    link_title: "This link is no longer valid",
+    link_text: "Ask your host for a new QR code and scan it.", until: "Access until ",
   };
   const STATE_LABEL = { on: T.on, off: T.off, locked: T.locked, unlocked: T.unlocked, open: T.opened,
     closed: T.closed, unavailable: T.unavailable };
@@ -85,9 +91,19 @@
   const content = document.getElementById("content");
   const titleEl = document.getElementById("title");
   const toastEl = document.getElementById("toast");
+  const expiryEl = document.getElementById("expiry");
   let cards = new Map();
   let signature = null;
   let toastTimer;
+
+  // The link token arrives in the address (?t=...) and is remembered so the page can be reopened until it expires.
+  const TOKEN_KEY = "ha_guest_token";
+  let token = new URLSearchParams(location.search).get("t");
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else token = localStorage.getItem(TOKEN_KEY);
+  } catch (err) { /* storage can be unavailable in private windows */ }
+  const auth = token ? { "X-Guest-Token": token } : {};
 
   const el = (tag, cls, text) => {
     const node = document.createElement(tag);
@@ -106,7 +122,7 @@
   async function act(entity_id, action, value) {
     try {
       const res = await fetch("/api/ha_guest/action", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", ...auth },
         body: JSON.stringify({ entity_id, action, value }),
       });
       if (!res.ok) throw new Error();
@@ -226,6 +242,9 @@
   function render(data) {
     titleEl.textContent = data.title;
     document.title = data.title;
+    expiryEl.textContent = data.expires
+      ? T.until + new Date(data.expires * 1000).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })
+      : "";
     if (!data.entities.length) return notice(data.title, T.empty);
 
     const next = data.entities.map(e => `${e.entity_id}|${e.area || ""}`).join(",");
@@ -258,7 +277,7 @@
   async function refresh() {
     let res;
     try {
-      res = await fetch("/api/ha_guest/states", { cache: "no-store" });
+      res = await fetch("/api/ha_guest/states", { cache: "no-store", headers: auth });
     } catch (err) {
       if (!cards.size) notice(T.offline, "");
       return;
@@ -266,6 +285,8 @@
     if (res.status === 403) {
       const body = await res.json().catch(() => ({}));
       titleEl.textContent = "";
+      expiryEl.textContent = "";
+      if (body.error === "link") return notice(T.link_title, T.link_text);
       return notice(T.wifi_title, T.wifi_text, body.ip ? T.your_ip + body.ip : "");
     }
     if (!res.ok) {

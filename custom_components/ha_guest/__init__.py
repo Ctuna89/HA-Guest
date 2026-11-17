@@ -2,7 +2,8 @@
 
 Two kinds of guest:
 
-* Someone visiting, with no account and no app: the panel at /guest, reachable only from the configured networks.
+* Someone visiting, with no account and no app: the panel at /guest, reachable only from the configured networks
+  and, optionally, only through a link that expires (handed over as a QR code from the «Guest QR» sidebar page).
 * Someone with a Home Assistant user and the Companion app: they keep a set of entities everywhere (for example
   Family Location), and get the «home only» entities while their phone is on your Wi-Fi.
 """
@@ -14,7 +15,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
-from .const import CONF_USERS, DOMAIN
+from .const import CONF_ENABLED, CONF_PANEL, CONF_SECRET, CONF_USERS, DOMAIN
+from .invite import async_setup_invites, async_show_invite_panel, new_secret
 from .panel import async_register_views
 from .permissions import GuestUserManager, async_release_users
 
@@ -26,19 +28,24 @@ type GuestConfigEntry = ConfigEntry[GuestUserManager]
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     # Views cannot be unregistered, so they are registered once and answer 404 while the panel is off.
     async_register_views(hass)
+    await async_setup_invites(hass)
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: GuestConfigEntry) -> bool:
+    if CONF_SECRET not in entry.data:
+        hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_SECRET: new_secret()})
     manager = GuestUserManager(hass, entry.options.get(CONF_USERS, {}))
     await manager.async_start()
     entry.runtime_data = manager
+    async_show_invite_panel(hass, bool(entry.options.get(CONF_PANEL, {}).get(CONF_ENABLED)))
     entry.async_on_unload(entry.add_update_listener(_reload))
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: GuestConfigEntry) -> bool:
     await entry.runtime_data.async_stop()
+    async_show_invite_panel(hass, False)
     return True
 
 

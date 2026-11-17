@@ -8,11 +8,13 @@
           "enabled": "Activar el panel de invitados",
           "title": "Título de la página",
           "networks": "Redes permitidas",
-          "entities": "Entidades que pueden manejar"
+          "entities": "Entidades que pueden manejar",
+          "link_hours": "Duración del enlace de invitados"
         },
         "data_description": {
           "networks": "La red de tu WiFi en formato CIDR, por ejemplo 192.168.1.0/24. Puedes agregar varias.",
-          "entities": "Los sensores se muestran como solo lectura."
+          "entities": "Los sensores se muestran como solo lectura.",
+          "link_hours": "Horas que sirve cada enlace o código QR. Al vencer, el invitado debe escanear un código nuevo. 0 = el enlace no vence y no hace falta código. Los códigos se crean en «Guest QR», en la barra lateral."
         }
       }
     },
@@ -31,7 +33,8 @@
           "panel": "Panel de invitados (sin cuenta)",
           "add_user": "Restringir a un usuario",
           "edit_user": "Editar un usuario restringido",
-          "remove_user": "Quitar la restricción a un usuario"
+          "remove_user": "Quitar la restricción a un usuario",
+          "revoke_links": "Anular todos los enlaces de invitados"
         }
       },
       "panel": {
@@ -41,11 +44,13 @@
           "enabled": "Activar el panel de invitados",
           "title": "Título de la página",
           "networks": "Redes permitidas",
-          "entities": "Entidades que pueden manejar"
+          "entities": "Entidades que pueden manejar",
+          "link_hours": "Duración del enlace de invitados"
         },
         "data_description": {
           "networks": "La red de tu WiFi en formato CIDR, por ejemplo 192.168.1.0/24. Puedes agregar varias.",
-          "entities": "Los sensores se muestran como solo lectura."
+          "entities": "Los sensores se muestran como solo lectura.",
+          "link_hours": "Horas que sirve cada enlace o código QR. Al vencer, el invitado debe escanear un código nuevo. 0 = el enlace no vence y no hace falta código. Los códigos se crean en «Guest QR», en la barra lateral."
         }
       },
       "add_user": {
@@ -86,6 +91,10 @@
         "data": {
           "user": "Usuarios"
         }
+      },
+      "revoke_links": {
+        "title": "Anular los enlaces",
+        "description": "Todos los enlaces y códigos QR entregados hasta ahora dejan de funcionar de inmediato. Los invitados deberán escanear un código nuevo."
       }
     },
     "error": {
@@ -93,7 +102,8 @@
       "no_states": "Escribe al menos un estado."
     },
     "abort": {
-      "no_users": "No hay usuarios para restringir. Crea primero un usuario que no sea administrador en Ajustes → Personas."
+      "no_users": "No hay usuarios para restringir. Crea primero un usuario que no sea administrador en Ajustes → Personas.",
+      "links_revoked": "Se anularon todos los enlaces de invitados."
     }
   }
 }

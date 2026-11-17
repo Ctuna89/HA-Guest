@@ -8,11 +8,13 @@
           "enabled": "Enable the guest panel",
           "title": "Page title",
           "networks": "Allowed networks",
-          "entities": "Entities guests can control"
+          "entities": "Entities guests can control",
+          "link_hours": "Guest link duration"
         },
         "data_description": {
           "networks": "Your Wi-Fi network in CIDR format, for example 192.168.1.0/24. You can add several.",
-          "entities": "Sensors are shown read-only."
+          "entities": "Sensors are shown read-only.",
+          "link_hours": "Hours each link or QR code works for. Once it expires, the guest has to scan a new code. 0 = the link never expires and no code is needed. Codes are created under «Guest QR» in the sidebar."
         }
       }
     },
@@ -31,7 +33,8 @@
           "panel": "Guest panel (no account)",
           "add_user": "Restrict a user",
           "edit_user": "Edit a restricted user",
-          "remove_user": "Stop restricting a user"
+          "remove_user": "Stop restricting a user",
+          "revoke_links": "Revoke all guest links"
         }
       },
       "panel": {
@@ -41,11 +44,13 @@
           "enabled": "Enable the guest panel",
           "title": "Page title",
           "networks": "Allowed networks",
-          "entities": "Entities guests can control"
+          "entities": "Entities guests can control",
+          "link_hours": "Guest link duration"
         },
         "data_description": {
           "networks": "Your Wi-Fi network in CIDR format, for example 192.168.1.0/24. You can add several.",
-          "entities": "Sensors are shown read-only."
+          "entities": "Sensors are shown read-only.",
+          "link_hours": "Hours each link or QR code works for. Once it expires, the guest has to scan a new code. 0 = the link never expires and no code is needed. Codes are created under «Guest QR» in the sidebar."
         }
       },
       "add_user": {
@@ -86,6 +91,10 @@
         "data": {
           "user": "Users"
         }
+      },
+      "revoke_links": {
+        "title": "Revoke guest links",
+        "description": "Every link and QR code handed out so far stops working immediately. Guests will have to scan a new code."
       }
     },
     "error": {
@@ -93,7 +102,8 @@
       "no_states": "Enter at least one state."
     },
     "abort": {
-      "no_users": "There are no users to restrict. First create a non-administrator user in Settings → People."
+      "no_users": "There are no users to restrict. First create a non-administrator user in Settings → People.",
+      "links_revoked": "All guest links were revoked."
     }
   }
 }

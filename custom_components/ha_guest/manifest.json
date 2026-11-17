@@ -4,12 +4,12 @@
   "after_dependencies": ["cloud"],
   "codeowners": ["@Ctuna89"],
   "config_flow": true,
-  "dependencies": ["http"],
+  "dependencies": ["frontend", "http", "websocket_api"],
   "documentation": "https://github.com/Ctuna89/HA-Guest",
   "integration_type": "service",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/Ctuna89/HA-Guest/issues",
-  "requirements": [],
+  "requirements": ["segno==1.6.6"],
   "single_config_entry": true,
-  "version": "0.1.0"
+  "version": "0.2.0"
 }

@@ -12,7 +12,7 @@ It covers two kinds of guest:
 | **Guest panel** | A friend visiting your home | Opens `http://<your-home-assistant>:8123/guest` in the browser. No app, no user | Controls the panel's entities, only from your network |
 | **Restricted user** | Someone with the Home Assistant app (e.g. a relative who shares their location) | With their own user, in the app or the browser | Always: whatever you allow (e.g. Family Location). Lights and the rest: only while their phone is on your Wi-Fi |
 
-<img src="docs/guest-panel.png" alt="Guest panel" width="320">
+<img src="docs/guest-panel.png" alt="Guest panel" width="320"> <img src="docs/guest-qr.png" alt="Guest QR page" width="320">
 
 ## Installation
 
@@ -35,6 +35,24 @@ The panel is configured when you add the integration:
 Guests open `http://<home-assistant-ip>:8123/guest`. The easiest way is to leave a QR code with that address.
 From any other network the page only shows «Connect to the home Wi-Fi» along with the IP address Home Assistant
 sees, which helps when adjusting the allowed networks.
+
+### Expiring links (QR codes)
+
+Being on the Wi-Fi is not always enough: someone you invited once could come back later, stand within reach of
+the network and switch your lights off. To prevent that, set **Guest link duration** to a number of hours.
+
+- The plain `/guest` address then stops working. Guests need a link that carries a code, and each link works
+  only for that many hours from the moment it was created.
+- Links are created on the **Guest QR** page in the Home Assistant sidebar, which shows a fresh QR code every
+  time it is opened. The guest scans it with their phone's camera while on your Wi-Fi.
+- **Any Home Assistant user of your household can create codes**, administrator or not, from the app or the
+  browser, even when away from home. Restricted users (see below) cannot.
+- When a link expires the guest sees «This link is no longer valid» and has to scan a new code.
+- **Configure → Revoke all guest links** cuts off every link handed out so far, immediately. Shortening the
+  duration also cuts links that were created with a longer one.
+
+With the duration at 0 (the default) links never expire and the Guest QR page simply shows the plain address.
+The QR code uses Home Assistant's local address (*Settings → System → Network → Local network*).
 
 Home Assistant cannot see the name of a visitor's Wi-Fi, only their IP address: that is why the panel is
 restricted by network. Remote access through Home Assistant Cloud (Nabu Casa) is always rejected. If you use a

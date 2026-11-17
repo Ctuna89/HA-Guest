@@ -211,3 +211,72 @@ async def test_app_only_receives_permitted_entities(hass, hass_ws_client):
     await hass.async_block_till_done()
     await client.send_json({"id": 3, "type": "get_states"})
     assert {s["entity_id"] for s in (await client.receive_json())["result"]} == {ALWAYS, LIVING}
+
+
+async def _invite(client, msg_id=1):
+    await client.send_json({"id": msg_id, "type": "ha_guest/invite"})
+    return await client.receive_json()
+
+
+async def test_expiring_links(hass, hass_client_no_auth, hass_ws_client, freezer):
+    entry = await _setup(hass, panel={"link_hours": 2})
+    http = await hass_client_no_auth()
+    ws = await hass_ws_client(hass)
+
+    # On the right network, but without a link from the household.
+    res = await http.get("/api/ha_guest/states")
+    assert res.status == 403 and (await res.json()) == {"error": "link"}
+    assert (await http.get("/api/ha_guest/states", headers={"X-Guest-Token": "9999999999.abc"})).status == 403
+
+    invite = (await _invite(ws))["result"]
+    assert "/guest?t=" in invite["url"] and invite["svg"].startswith("<svg")
+    headers = {"X-Guest-Token": invite["url"].split("?t=")[1]}
+    res = await http.get("/api/ha_guest/states", headers=headers)
+    assert res.status == 200 and (await res.json())["expires"] == invite["expires"]
+    body = {"entity_id": LIVING, "action": "turn_on"}
+    assert (await http.post("/api/ha_guest/action", json=body)).status == 403
+    assert (await http.post("/api/ha_guest/action", json=body, headers=headers)).status == 200
+
+    freezer.tick(2 * 3600 + 1)
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 403
+
+    # Revoking kills links that have not expired yet.
+    headers = {"X-Guest-Token": (await _invite(ws, 2))["result"]["url"].split("?t=")[1]}
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 200
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert "revoke_links" in result["menu_options"]
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "revoke_links"})
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["reason"] == "links_revoked"
+    await hass.async_block_till_done()
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 403
+
+
+async def test_shortening_the_duration_cuts_existing_links(hass, hass_client_no_auth, hass_ws_client):
+    entry = await _setup(hass, panel={"link_hours": 24})
+    http = await hass_client_no_auth()
+    headers = {"X-Guest-Token": (await _invite(await hass_ws_client(hass)))["result"]["url"].split("?t=")[1]}
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 200
+
+    panel = {**entry.options["panel"], "link_hours": 1}
+    hass.config_entries.async_update_entry(entry, options={**entry.options, "panel": panel})
+    await hass.async_block_till_done()
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 403
+
+
+async def test_who_can_invite(hass, hass_ws_client):
+    """Any household member can create a code, administrator or not; a restricted guest cannot."""
+    guest = await _create_user(hass)
+    member = await hass.auth.async_create_user("Hija", group_ids=[GROUP_ID_USER])
+    await _setup(hass, users={guest.id: _user_conf()})
+
+    async def invite_as(user):
+        refresh = await hass.auth.async_create_refresh_token(user, "https://example.com")
+        client = await hass_ws_client(hass, hass.auth.async_create_access_token(refresh))
+        return await _invite(client)
+
+    result = await invite_as(member)
+    assert result["success"] and result["result"]["expires"] is None  # links do not expire by default
+    assert result["result"]["url"].endswith("/guest")
+    assert (await invite_as(guest))["error"]["code"] == "unauthorized"
+    assert "guest-qr" in hass.data["frontend_panels"]

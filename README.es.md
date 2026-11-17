@@ -12,7 +12,7 @@ Cubre dos tipos de invitado:
 | **Panel de invitados** | Un amigo que va a tu casa | Abre `http://<tu-home-assistant>:8123/guest` en el navegador. Sin app y sin usuario | Maneja las entidades del panel, solo desde tu red |
 | **Usuario restringido** | Alguien con la app de Home Assistant (p. ej. tu suegra, para compartir ubicación) | Con su usuario, en la app o el navegador | Siempre: lo que le permitas (p. ej. Family Location). Luces y demás: solo cuando su teléfono está en tu WiFi |
 
-<img src="docs/guest-panel.png" alt="Panel de invitados" width="320">
+<img src="docs/guest-panel.png" alt="Panel de invitados" width="320"> <img src="docs/guest-qr.png" alt="Página Guest QR" width="320">
 
 ## Instalación
 
@@ -36,6 +36,24 @@ Al añadir la integración se configura el panel:
 El invitado entra a `http://<ip-de-home-assistant>:8123/guest`. Lo más cómodo es dejar un código QR con esa
 dirección. Desde otra red, la página solo muestra «Conéctate al WiFi de la casa» junto a la dirección IP que
 Home Assistant ve, lo que sirve para ajustar las redes permitidas.
+
+### Enlaces que vencen (códigos QR)
+
+Estar en el WiFi no siempre basta: alguien a quien invitaste una vez podría volver otro día, pararse al alcance
+de la red y apagarte las luces. Para evitarlo, pon en **Duración del enlace de invitados** una cantidad de horas.
+
+- La dirección `/guest` a secas deja de funcionar. El invitado necesita un enlace con un código, y cada enlace
+  sirve solo esa cantidad de horas desde que se creó.
+- Los enlaces se crean en la página **Guest QR** de la barra lateral de Home Assistant, que muestra un código QR
+  nuevo cada vez que se abre. El invitado lo escanea con la cámara del teléfono, conectado a tu WiFi.
+- **Cualquier usuario de Home Assistant de tu casa puede crear códigos**, sea o no administrador, desde la app
+  o el navegador, incluso estando fuera de casa. Los usuarios restringidos (ver más abajo) no pueden.
+- Cuando el enlace vence, el invitado ve «Este enlace ya no es válido» y debe escanear un código nuevo.
+- **Configurar → Anular todos los enlaces de invitados** corta de inmediato todos los enlaces entregados hasta
+  ahora. Acortar la duración también corta los enlaces creados con una duración mayor.
+
+Con la duración en 0 (por defecto) los enlaces no vencen y la página Guest QR muestra la dirección a secas.
+El código QR usa la dirección local de Home Assistant (*Ajustes → Sistema → Red → Red local*).
 
 Home Assistant no puede ver el nombre del WiFi del visitante, solo su dirección IP: por eso el panel se
 restringe por red. El acceso remoto por Home Assistant Cloud (Nabu Casa) siempre se rechaza. Si usas un proxy

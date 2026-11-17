@@ -20,14 +20,17 @@ from .const import (
     CONF_ENTITIES,
     CONF_FAMILY_LOCATION,
     CONF_HOME_ENTITIES,
+    CONF_LINK_HOURS,
     CONF_NETWORKS,
     CONF_PANEL,
+    CONF_SECRET,
     CONF_TITLE,
     CONF_USER,
     CONF_USERS,
     DEFAULT_TITLE,
     DOMAIN,
 )
+from .invite import new_secret
 
 ENTITIES = selector.EntitySelector(selector.EntitySelectorConfig(multiple=True))
 TEXT_LIST = selector.TextSelector(selector.TextSelectorConfig(multiple=True))
@@ -37,6 +40,9 @@ PANEL_SCHEMA = vol.Schema({
     vol.Required(CONF_TITLE, default=DEFAULT_TITLE): selector.TextSelector(),
     vol.Required(CONF_NETWORKS): TEXT_LIST,
     vol.Optional(CONF_ENTITIES, default=[]): ENTITIES,
+    vol.Required(CONF_LINK_HOURS, default=0): selector.NumberSelector(
+        selector.NumberSelectorConfig(min=0, max=720, step=0.5, unit_of_measurement="h", mode=selector.NumberSelectorMode.BOX)
+    ),
 })
 
 USER_SCHEMA = vol.Schema({
@@ -75,7 +81,7 @@ class GuestConfigFlow(ConfigFlow, domain=DOMAIN):
             if networks := _clean_networks(user_input[CONF_NETWORKS]):
                 panel = {**user_input, CONF_NETWORKS: networks}
                 return self.async_create_entry(
-                    title="HA Guest", data={}, options={CONF_PANEL: panel, CONF_USERS: {}}
+                    title="HA Guest", data={CONF_SECRET: new_secret()}, options={CONF_PANEL: panel, CONF_USERS: {}}
                 )
             errors[CONF_NETWORKS] = "invalid_network"
         suggested = user_input or {CONF_NETWORKS: _default_network(self.hass)}
@@ -112,6 +118,8 @@ class GuestOptionsFlow(OptionsFlow):
         options = ["panel", "add_user"]
         if self._users:
             options += ["edit_user", "remove_user"]
+        if self.config_entry.options.get(CONF_PANEL, {}).get(CONF_LINK_HOURS):
+            options.append("revoke_links")
         return self.async_show_menu(step_id="init", menu_options=options)
 
     async def async_step_panel(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
@@ -125,6 +133,15 @@ class GuestOptionsFlow(OptionsFlow):
             step_id="panel", errors=errors,
             data_schema=self.add_suggested_values_to_schema(PANEL_SCHEMA, suggested),
         )
+
+    async def async_step_revoke_links(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Replace the signing secret, which makes every link handed out so far stop working."""
+        if user_input is not None:
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data={**self.config_entry.data, CONF_SECRET: new_secret()}
+            )
+            return self.async_abort(reason="links_revoked")
+        return self.async_show_form(step_id="revoke_links", data_schema=vol.Schema({}))
 
     async def async_step_add_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Pick who to restrict. Owners and administrators are not offered: they cannot be restricted."""
