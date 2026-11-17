@@ -20,7 +20,7 @@ CONF_CONDITION_ENTITY = "condition_entity"
 CONF_CONDITION_STATES = "condition_states"
 CONF_AWAY_READ = "away_read"
 
-DEFAULT_TITLE = "Invitados"
+DEFAULT_TITLE = "Guests"
 
 PANEL_URL = "/guest"
 API_STATES_URL = "/api/ha_guest/states"
