@@ -36,6 +36,42 @@ Guests open `http://<home-assistant-ip>:8123/guest`. The easiest way is to leave
 From any other network the page only shows «Connect to the home Wi-Fi» along with the IP address Home Assistant
 sees, which helps when adjusting the allowed networks.
 
+### Customising the look
+
+The page follows how your Home Assistant is already set up, and the rest is under **Configure → Guest panel
+appearance**:
+
+- **Names and icons** are the ones your entities have in Home Assistant. Change them there and the guest page
+  follows.
+- **Theme:** any theme installed in your Home Assistant (`frontend: themes:` or HACS themes). Its colours,
+  light/dark variants and card corner radius are applied to the guest page.
+- **Light or dark mode**, an **accent colour** (`#rrggbb`) that replaces the theme's primary colour, and whether
+  to **show icons**.
+- **Welcome message:** shown under the title, for example the house rules.
+- **Layout (YAML):** by default entities are grouped by area. To choose the order, sections, and per-card names
+  and icons, write a layout in the same style as a dashboard's entities card:
+
+  ```yaml
+  - title: Living room
+    entities:
+      - entity: light.living_room
+        name: Ceiling lights
+        icon: mdi:ceiling-light
+      - cover.curtain
+  - title: Scenes
+    entities:
+      - entity: scene.movie_night
+        icon: mdi:movie-open
+  ```
+
+  The layout only arranges cards. Guests can still only use entities on the panel's entity list, and the form
+  tells you if the layout names one that is not on it.
+
+<img src="docs/guest-themed.png" alt="Guest panel with a Home Assistant theme and a custom layout" width="320">
+
+Theme values that point at other theme variables (`var(--…)`) are skipped, because they cannot be resolved
+outside Home Assistant. The page is not a Lovelace dashboard: it does not run custom cards.
+
 ### Expiring links (QR codes)
 
 Being on the Wi-Fi is not always enough: someone you invited once could come back later, stand within reach of
@@ -44,7 +80,8 @@ the network and switch your lights off. To prevent that, set **Guest link durati
 - The plain `/guest` address then stops working. Guests need a link that carries a code, and each link works
   only for that many hours from the moment it was created.
 - Links are created on the **Guest QR** page in the Home Assistant sidebar, which shows a fresh QR code every
-  time it is opened. The guest scans it with their phone's camera while on your Wi-Fi.
+  time it is opened. The guest scans it with their phone's camera while on your Wi-Fi, or you send them the
+  link with **Share link** / **Copy link**.
 - **Any Home Assistant user of your household can create codes**, administrator or not, from the app or the
   browser, even when away from home. Restricted users (see below) cannot.
 - When a link expires the guest sees «This link is no longer valid» and has to scan a new code.
@@ -69,11 +106,13 @@ reverse proxy, configure `trusted_proxies` under `http:` so Home Assistant sees 
      [Family Location](https://github.com/Ctuna89/HA-Family-Location) entities, including the check-in and
      ask-for-help buttons.
    - **Entities allowed only at home:** e.g. the living room lights.
-   - **Entity that shows they are home** and its **states**: usually their phone's Wi-Fi connection sensor
+   - **Entity that shows they are home**: usually their phone's Wi-Fi connection sensor
      (`sensor.<phone>_wifi_connection` on Android, `sensor.<phone>_ssid` on iPhone) and the name of your Wi-Fi.
      You can also use a `device_tracker` from your router with the state `home`, which is harder to fool than a
      network name.
    - **When away, show them read-only:** if off, these entities do not appear to them while away.
+4. The next step shows **what that entity reports right now** and offers it as the «home» state. If the phone is
+   on your Wi-Fi at that moment, accept it; a state that does not match exactly never grants access.
 
 Anything not on those lists they can no longer see or control. Home Assistant enforces the restriction on the
 server, so it applies equally to the app, the browser and the API.

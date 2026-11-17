@@ -34,7 +34,8 @@
           "add_user": "Restringir a un usuario",
           "edit_user": "Editar un usuario restringido",
           "remove_user": "Quitar la restricción a un usuario",
-          "revoke_links": "Anular todos los enlaces de invitados"
+          "revoke_links": "Anular todos los enlaces de invitados",
+          "appearance": "Apariencia del panel de invitados"
         }
       },
       "panel": {
@@ -73,7 +74,6 @@
           "family_location": "Incluir Family Location",
           "home_entities": "Entidades permitidas solo en casa",
           "condition_entity": "Entidad que indica que está en casa",
-          "condition_states": "Estados que cuentan como «en casa»",
           "away_read": "Fuera de casa, mostrarlas como solo lectura"
         },
         "data_description": {
@@ -81,9 +81,9 @@
           "family_location": "Permite siempre el mapa (personas y zonas) y las entidades de Family Location, incluidos los botones de check-in y de pedir ayuda.",
           "home_entities": "Las puede ver y manejar solo mientras se cumple la condición de abajo.",
           "condition_entity": "Normalmente el sensor de conexión WiFi de su teléfono (app de Home Assistant). También sirve un device_tracker de tu router.",
-          "condition_states": "El nombre de tu WiFi (SSID), tal como lo muestra el sensor. Para un device_tracker, escribe home.",
           "away_read": "Si lo dejas apagado, fuera de casa esas entidades no le aparecen."
-        }
+        },
+        "description": "En el paso siguiente indicas qué estado de la entidad significa «en casa»."
       },
       "remove_user": {
         "title": "Quitar la restricción",
@@ -95,15 +95,60 @@
       "revoke_links": {
         "title": "Anular los enlaces",
         "description": "Todos los enlaces y códigos QR entregados hasta ahora dejan de funcionar de inmediato. Los invitados deberán escanear un código nuevo."
+      },
+      "appearance": {
+        "title": "Apariencia del panel de invitados",
+        "description": "Los nombres e iconos de las entidades son los que ya tienes en Home Assistant. Aquí eliges el tema, los colores y, si quieres, el orden y las secciones.",
+        "data": {
+          "theme": "Tema",
+          "mode": "Modo claro u oscuro",
+          "accent": "Color de acento",
+          "welcome": "Mensaje de bienvenida",
+          "show_icons": "Mostrar iconos",
+          "layout": "Diseño (YAML)"
+        },
+        "data_description": {
+          "theme": "Cualquier tema instalado en tu Home Assistant.",
+          "accent": "Opcional, en formato #rrggbb. Reemplaza el color principal del tema.",
+          "welcome": "Opcional. Se muestra bajo el título; por ejemplo las reglas de la casa.",
+          "layout": "Opcional. Lista de secciones con título y entidades, como en una tarjeta de entidades; cada entidad puede llevar name e icon propios. Si lo dejas vacío, se agrupan por área."
+        }
+      },
+      "home_state": {
+        "title": "¿Cuándo está en casa?",
+        "description": "Ahora mismo **{entity}** informa: **{state}**\n\nSi ese teléfono está conectado a tu WiFi en este momento, ese es el valor que debes usar. Debe coincidir exactamente; si no coincide, la persona nunca obtendrá el acceso de «en casa».",
+        "data": {
+          "condition_states": "Estados que cuentan como «en casa»"
+        },
+        "data_description": {
+          "condition_states": "El nombre de tu WiFi (SSID), tal como lo muestra el sensor. Para un device_tracker, escribe home."
+        }
       }
     },
     "error": {
       "invalid_network": "Hay una red que no es válida. Usa el formato 192.168.1.0/24.",
-      "no_states": "Escribe al menos un estado."
+      "no_states": "Escribe al menos un estado.",
+      "invalid_color": "Usa un color en formato #rrggbb, por ejemplo #ff9800.",
+      "invalid_layout": "El diseño no es válido. Debe ser una lista de secciones, cada una con «entities».",
+      "layout_not_allowed": "El diseño usa entidades que no están en la lista del panel de invitados: {entity}"
     },
     "abort": {
       "no_users": "No hay usuarios para restringir. Crea primero un usuario que no sea administrador en Ajustes → Personas.",
       "links_revoked": "Se anularon todos los enlaces de invitados."
+    }
+  },
+  "selector": {
+    "theme": {
+      "options": {
+        "default": "Predeterminado de HA Guest"
+      }
+    },
+    "mode": {
+      "options": {
+        "auto": "Según el teléfono del invitado",
+        "light": "Claro",
+        "dark": "Oscuro"
+      }
     }
   }
 }

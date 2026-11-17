@@ -1,18 +1,22 @@
-"""Config flow: the guest panel on first setup; the panel and the restricted users from «Configure»."""
+"""Config flow: the guest panel on first setup; panel, appearance and restricted users from «Configure»."""
 
 from __future__ import annotations
 
 from ipaddress import ip_network
+import re
 from typing import Any
 
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import selector
+from homeassistant.helpers import config_validation as cv, selector
 
 from .const import (
+    CONF_ACCENT,
     CONF_ALWAYS_ENTITIES,
+    CONF_APPEARANCE,
     CONF_AWAY_READ,
     CONF_CONDITION_ENTITY,
     CONF_CONDITION_STATES,
@@ -20,13 +24,19 @@ from .const import (
     CONF_ENTITIES,
     CONF_FAMILY_LOCATION,
     CONF_HOME_ENTITIES,
+    CONF_LAYOUT,
     CONF_LINK_HOURS,
+    CONF_MODE,
     CONF_NETWORKS,
     CONF_PANEL,
     CONF_SECRET,
+    CONF_SHOW_ICONS,
+    CONF_THEME,
     CONF_TITLE,
     CONF_USER,
     CONF_USERS,
+    CONF_WELCOME,
+    DEFAULT_THEME,
     DEFAULT_TITLE,
     DOMAIN,
 )
@@ -49,10 +59,23 @@ USER_SCHEMA = vol.Schema({
     vol.Optional(CONF_ALWAYS_ENTITIES, default=[]): ENTITIES,
     vol.Required(CONF_FAMILY_LOCATION, default=False): selector.BooleanSelector(),
     vol.Optional(CONF_HOME_ENTITIES, default=[]): ENTITIES,
-    vol.Required(CONF_CONDITION_ENTITY): selector.EntitySelector(),
-    vol.Required(CONF_CONDITION_STATES): TEXT_LIST,
     vol.Required(CONF_AWAY_READ, default=False): selector.BooleanSelector(),
+    vol.Required(CONF_CONDITION_ENTITY): selector.EntitySelector(),
 })
+
+HOME_STATE_SCHEMA = vol.Schema({vol.Required(CONF_CONDITION_STATES): TEXT_LIST})
+
+# What the owner writes under «Layout», in the style of a dashboard's entities card.
+LAYOUT_SCHEMA = vol.Schema([{
+    vol.Optional("title"): cv.string,
+    vol.Required("entities"): [vol.Any(
+        cv.entity_id,
+        {vol.Required("entity"): cv.entity_id, vol.Optional("name"): cv.string, vol.Optional("icon"): cv.icon},
+    )],
+}])
+HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+# States that mean «home» for entities that are not a Wi-Fi name sensor.
+HOME_BY_DOMAIN = {"device_tracker": "home", "person": "home", "binary_sensor": "on", "input_boolean": "on"}
 
 
 def _default_network(hass: HomeAssistant) -> list[str]:
@@ -99,6 +122,7 @@ class GuestConfigFlow(ConfigFlow, domain=DOMAIN):
 class GuestOptionsFlow(OptionsFlow):
     def __init__(self) -> None:
         self._user_id: str | None = None
+        self._user_conf: dict[str, Any] = {}
 
     @property
     def _users(self) -> dict[str, dict[str, Any]]:
@@ -115,7 +139,7 @@ class GuestOptionsFlow(OptionsFlow):
         }
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        options = ["panel", "add_user"]
+        options = ["panel", "appearance", "add_user"]
         if self._users:
             options += ["edit_user", "remove_user"]
         if self.config_entry.options.get(CONF_PANEL, {}).get(CONF_LINK_HOURS):
@@ -132,6 +156,50 @@ class GuestOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="panel", errors=errors,
             data_schema=self.add_suggested_values_to_schema(PANEL_SCHEMA, suggested),
+        )
+
+    async def async_step_appearance(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """How the guest page looks: a Home Assistant theme, colours, a welcome text and the layout."""
+        errors: dict[str, str] = {}
+        placeholders = {"entity": ""}
+        if user_input is not None:
+            accent = (user_input.get(CONF_ACCENT) or "").strip()
+            layout = user_input.get(CONF_LAYOUT) or []
+            if accent and not HEX_COLOR.match(accent):
+                errors[CONF_ACCENT] = "invalid_color"
+            try:
+                layout = LAYOUT_SCHEMA(layout)
+            except vol.Invalid:
+                errors[CONF_LAYOUT] = "invalid_layout"
+            else:
+                allowed = self.config_entry.options.get(CONF_PANEL, {}).get(CONF_ENTITIES, [])
+                used = [item if isinstance(item, str) else item["entity"] for s in layout for item in s["entities"]]
+                if missing := [entity_id for entity_id in used if entity_id not in allowed]:
+                    errors[CONF_LAYOUT] = "layout_not_allowed"
+                    placeholders["entity"] = ", ".join(missing)
+            if not errors:
+                appearance = {**user_input, CONF_ACCENT: accent, CONF_LAYOUT: layout}
+                return self._save(**{CONF_APPEARANCE: appearance})
+
+        themes = [DEFAULT_THEME, *sorted(self.hass.data.get("frontend_themes", {}))]
+        current = self.config_entry.options.get(CONF_APPEARANCE, {})
+        if current.get(CONF_THEME) not in themes:
+            current = {**current, CONF_THEME: DEFAULT_THEME}
+        schema = vol.Schema({
+            vol.Required(CONF_THEME, default=DEFAULT_THEME): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=themes, translation_key=CONF_THEME, mode=selector.SelectSelectorMode.DROPDOWN)
+            ),
+            vol.Required(CONF_MODE, default="auto"): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=["auto", "light", "dark"], translation_key=CONF_MODE)
+            ),
+            vol.Optional(CONF_ACCENT): selector.TextSelector(),
+            vol.Optional(CONF_WELCOME): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
+            vol.Required(CONF_SHOW_ICONS, default=True): selector.BooleanSelector(),
+            vol.Optional(CONF_LAYOUT): selector.ObjectSelector(),
+        })
+        return self.async_show_form(
+            step_id="appearance", errors=errors, description_placeholders=placeholders,
+            data_schema=self.add_suggested_values_to_schema(schema, user_input or current),
         )
 
     async def async_step_revoke_links(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
@@ -171,20 +239,46 @@ class GuestOptionsFlow(OptionsFlow):
 
     async def async_step_user_settings(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         assert self._user_id is not None
+        if user_input is not None:
+            self._user_conf = user_input
+            return await self.async_step_home_state()
+        names = await self._user_names()
+        return self.async_show_form(
+            step_id="user_settings",
+            data_schema=self.add_suggested_values_to_schema(USER_SCHEMA, self._users.get(self._user_id, {})),
+            description_placeholders={"name": names.get(self._user_id, self._user_id)},
+        )
+
+    async def async_step_home_state(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Which states of the chosen entity mean «home», shown next to what it reports right now.
+
+        A mistyped Wi-Fi name would never match and never say so, so the current value is offered as the answer.
+        """
+        assert self._user_id is not None
+        entity_id = self._user_conf[CONF_CONDITION_ENTITY]
         errors: dict[str, str] = {}
         if user_input is not None:
             states = [s.strip() for s in user_input[CONF_CONDITION_STATES] if s.strip()]
             if states:
-                conf = {**user_input, CONF_CONDITION_STATES: states}
+                conf = {**self._user_conf, CONF_CONDITION_STATES: states}
                 return self._save(**{CONF_USERS: {**self._users, self._user_id: conf}})
             errors[CONF_CONDITION_STATES] = "no_states"
-        names = await self._user_names()
+
+        state = self.hass.states.get(entity_id)
+        current = state.state if state else STATE_UNAVAILABLE
+        previous = self._users.get(self._user_id, {})
+        if previous.get(CONF_CONDITION_ENTITY) == entity_id and previous.get(CONF_CONDITION_STATES):
+            suggested = previous[CONF_CONDITION_STATES]
+        elif home := HOME_BY_DOMAIN.get(entity_id.partition(".")[0]):
+            suggested = [home]
+        elif current not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            suggested = [current]
+        else:
+            suggested = []
         return self.async_show_form(
-            step_id="user_settings", errors=errors,
-            data_schema=self.add_suggested_values_to_schema(
-                USER_SCHEMA, user_input or self._users.get(self._user_id, {})
-            ),
-            description_placeholders={"name": names.get(self._user_id, self._user_id)},
+            step_id="home_state", errors=errors,
+            data_schema=self.add_suggested_values_to_schema(HOME_STATE_SCHEMA, {CONF_CONDITION_STATES: suggested}),
+            description_placeholders={"entity": state.name if state else entity_id, "state": current},
         )
 
     async def async_step_remove_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:

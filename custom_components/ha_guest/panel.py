@@ -22,6 +22,14 @@ from homeassistant.helpers import area_registry as ar, device_registry as dr, en
 from homeassistant.helpers.network import is_cloud_connection
 
 from .const import (
+    CONF_ACCENT,
+    CONF_APPEARANCE,
+    CONF_LAYOUT,
+    CONF_MODE,
+    CONF_SHOW_ICONS,
+    CONF_THEME,
+    CONF_WELCOME,
+    DEFAULT_THEME,
     API_ACTION_URL,
     API_STATES_URL,
     CONF_ENABLED,
@@ -35,6 +43,7 @@ from .const import (
     PANEL_URL,
     TOKEN_HEADER,
 )
+from .icons import async_icon_path
 from .invite import link_seconds, token_expiry
 
 ATTRIBUTES = (
@@ -42,6 +51,35 @@ ATTRIBUTES = (
     "min_temp", "max_temp", "target_temp_step", "hvac_modes", "volume_level", "media_title",
     "unit_of_measurement", "device_class",
 )
+
+DOMAIN_ICONS = {
+    "light": "mdi:lightbulb", "switch": "mdi:toggle-switch-variant", "input_boolean": "mdi:toggle-switch-variant",
+    "fan": "mdi:fan", "humidifier": "mdi:air-humidifier", "cover": "mdi:window-shutter", "valve": "mdi:pipe-valve",
+    "lock": "mdi:lock", "scene": "mdi:palette", "script": "mdi:script-text", "button": "mdi:gesture-tap-button",
+    "input_button": "mdi:gesture-tap-button", "climate": "mdi:thermostat", "media_player": "mdi:speaker",
+    "vacuum": "mdi:robot-vacuum", "binary_sensor": "mdi:checkbox-marked-circle-outline",
+}
+DEVICE_CLASS_ICONS = {
+    "temperature": "mdi:thermometer", "humidity": "mdi:water-percent", "door": "mdi:door", "window": "mdi:window-closed",
+    "motion": "mdi:motion-sensor", "battery": "mdi:battery", "power": "mdi:flash", "energy": "mdi:lightning-bolt",
+    "illuminance": "mdi:brightness-5", "garage": "mdi:garage", "curtain": "mdi:curtains", "blind": "mdi:blinds",
+    "outlet": "mdi:power-socket", "tv": "mdi:television", "speaker": "mdi:speaker",
+}
+DEFAULT_ICON = "mdi:eye"
+
+# Home Assistant theme variable -> the guest page's own variable
+THEME_VARIABLES = {
+    "primary-color": "--accent",
+    "text-primary-color": "--accent-text",
+    "primary-background-color": "--bg",
+    "card-background-color": "--card",
+    "ha-card-background": "--card",
+    "primary-text-color": "--text",
+    "secondary-text-color": "--muted",
+    "divider-color": "--line",
+    "secondary-background-color": "--btn",
+    "ha-card-border-radius": "--radius",
+}
 
 ON_OFF = {"turn_on": "turn_on", "turn_off": "turn_off", "toggle": "toggle"}
 # domain -> guest action -> service
@@ -105,7 +143,11 @@ def panel_config(hass: HomeAssistant) -> dict[str, Any] | None:
     for entry in hass.config_entries.async_loaded_entries(DOMAIN):
         conf = entry.options.get(CONF_PANEL, {})
         if conf.get(CONF_ENABLED):
-            return {**conf, CONF_SECRET: entry.data.get(CONF_SECRET, "")}
+            return {
+                **conf,
+                CONF_SECRET: entry.data.get(CONF_SECRET, ""),
+                CONF_APPEARANCE: entry.options.get(CONF_APPEARANCE, {}),
+            }
     return None
 
 
@@ -137,6 +179,77 @@ def _area_name(hass: HomeAssistant, entity_id: str) -> str | None:
         area_id = device.area_id if device else None
     area = ar.async_get(hass).async_get_area(area_id) if area_id else None
     return area.name if area else None
+
+
+def theme_variables(hass: HomeAssistant, name: str | None) -> dict[str, dict[str, str]]:
+    """A Home Assistant theme as the guest page's variables, for light and for dark mode."""
+    theme = hass.data.get("frontend_themes", {}).get(name) if name and name != DEFAULT_THEME else None
+    if not isinstance(theme, dict):
+        return {"light": {}, "dark": {}}
+    modes = theme.get("modes") or {}
+    result = {}
+    for mode in ("light", "dark"):
+        merged = {**theme, **(modes.get(mode) or {})}
+        result[mode] = {
+            ours: str(merged[theirs]) for theirs, ours in THEME_VARIABLES.items()
+            # A value that points at another theme variable cannot be resolved outside Home Assistant.
+            if isinstance(merged.get(theirs), (str, int, float)) and "var(" not in str(merged[theirs])
+        }
+    return result
+
+
+def _icon_name(hass: HomeAssistant, state: State, override: str | None) -> str:
+    """Same precedence as Home Assistant: the icon chosen by the owner wins over the integration's."""
+    entry = er.async_get(hass).async_get(state.entity_id)
+    return (
+        override
+        or (entry and entry.icon)
+        or state.attributes.get("icon")
+        or (entry and entry.original_icon)
+        or DEVICE_CLASS_ICONS.get(state.attributes.get("device_class"))
+        or DOMAIN_ICONS.get(state.domain, DEFAULT_ICON)
+    )
+
+
+async def async_build_sections(hass: HomeAssistant, conf: dict[str, Any]) -> list[dict[str, Any]]:
+    """The page content: the owner's layout if there is one, otherwise the allowed entities grouped by area."""
+    allowed = conf.get(CONF_ENTITIES, [])
+    appearance = conf.get(CONF_APPEARANCE, {})
+    show_icons = appearance.get(CONF_SHOW_ICONS, True)
+
+    plan: list[tuple[str | None, list[dict[str, Any]]]] = []
+    if layout := appearance.get(CONF_LAYOUT):
+        for section in layout:
+            items = [{"entity": item} if isinstance(item, str) else item for item in section.get("entities", [])]
+            plan.append((section.get("title"), items))
+    else:
+        by_area: dict[str | None, list[dict[str, Any]]] = {}
+        for entity_id in allowed:
+            by_area.setdefault(_area_name(hass, entity_id), []).append({"entity": entity_id})
+        named = sorted((area for area in by_area if area), key=str.casefold)
+        plan = [(area, by_area[area]) for area in named]
+        if None in by_area:
+            plan.append((None, by_area[None]))
+
+    sections = []
+    for title, items in plan:
+        entities = []
+        for item in items:
+            entity_id = item.get("entity")
+            # The layout only arranges; what a guest may touch is decided by the allowed list alone.
+            if entity_id not in allowed or (state := hass.states.get(entity_id)) is None:
+                continue
+            icon = await async_icon_path(hass, _icon_name(hass, state, item.get("icon"))) if show_icons else None
+            entities.append({
+                "entity_id": entity_id,
+                "name": item.get("name") or state.name,
+                "state": state.state,
+                "icon": icon,
+                "attributes": {k: state.attributes[k] for k in ATTRIBUTES if k in state.attributes},
+            })
+        if entities:
+            sections.append({"title": title, "entities": entities})
+    return sections
 
 
 class _GuestView(HomeAssistantView):
@@ -191,18 +304,18 @@ class GuestStatesView(_GuestView):
         if isinstance(guard, web.Response):
             return guard
         hass, conf, expires = guard
-        entities = []
-        for entity_id in conf.get(CONF_ENTITIES, []):
-            if (state := hass.states.get(entity_id)) is None:
-                continue
-            entities.append({
-                "entity_id": entity_id,
-                "name": state.name,
-                "state": state.state,
-                "area": _area_name(hass, entity_id),
-                "attributes": {k: state.attributes[k] for k in ATTRIBUTES if k in state.attributes},
-            })
-        return self.json({"title": conf.get(CONF_TITLE) or DEFAULT_TITLE, "expires": expires, "entities": entities})
+        appearance = conf.get(CONF_APPEARANCE, {})
+        return self.json({
+            "title": conf.get(CONF_TITLE) or DEFAULT_TITLE,
+            "expires": expires,
+            "appearance": {
+                "mode": appearance.get(CONF_MODE, "auto"),
+                "theme": theme_variables(hass, appearance.get(CONF_THEME)),
+                "accent": appearance.get(CONF_ACCENT) or None,
+                "welcome": appearance.get(CONF_WELCOME) or "",
+            },
+            "sections": await async_build_sections(hass, conf),
+        })
 
 
 class GuestActionView(_GuestView):

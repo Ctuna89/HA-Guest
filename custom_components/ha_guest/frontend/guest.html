@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-mode="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -8,15 +8,14 @@
 <meta name="mobile-web-app-capable" content="yes">
 <title>Guests</title>
 <style>
+  /* These variables are the whole look. A Home Assistant theme chosen by the owner overrides them at run time. */
   :root {
-    --bg: #f3f4f6; --card: #ffffff; --text: #16181d; --muted: #6b7280; --line: #e5e7eb;
-    --accent: #f59e0b; --accent-text: #1f1300; --btn: #eef0f3;
+    --bg: #f3f4f6; --card: #ffffff; --text: #16181d; --muted: #5b6472; --line: #e5e7eb;
+    --accent: #b45309; --accent-text: #ffffff; --btn: #eef0f3; --control: #848b98; --radius: 16px;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0f1115; --card: #1a1d24; --text: #f1f3f5; --muted: #9aa1ad; --line: #2a2e37;
-      --accent: #fbbf24; --accent-text: #1f1300; --btn: #262a33;
-    }
+  :root[data-mode="dark"] {
+    --bg: #0f1115; --card: #1a1d24; --text: #f1f3f5; --muted: #9aa1ad; --line: #2a2e37;
+    --accent: #fbbf24; --accent-text: #1f1300; --btn: #262a33; --control: #6f7786;
   }
   * { box-sizing: border-box; }
   body {
@@ -25,76 +24,125 @@
     padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
   }
   main { max-width: 880px; margin: 0 auto; }
-  h1 { font-size: 26px; margin: 8px 0 20px; }
+  h1 { font-size: 26px; margin: 8px 0 4px; }
+  #welcome { margin: 0 0 4px; white-space: pre-line; }
+  #expiry { color: var(--muted); font-size: 14px; margin: 0; }
+  #expiry.soon { color: var(--text); font-weight: 600; }
+  #content { margin-top: 20px; }
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 24px 0 10px; }
   .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
-  .card.on { border-color: var(--accent); }
-  .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-  .name { font-weight: 600; overflow-wrap: anywhere; }
-  .state { color: var(--muted); font-size: 14px; white-space: nowrap; }
-  .row { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
-  button {
-    flex: 1; min-height: 44px; border: 0; border-radius: 12px; background: var(--btn); color: var(--text);
-    font: inherit; font-weight: 600; cursor: pointer;
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  .head { display: flex; align-items: center; gap: 12px; min-height: 44px; }
+  .icon {
+    flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--btn); color: var(--muted);
+    display: grid; place-items: center;
   }
-  button:active { transform: scale(.97); }
-  button.primary { background: var(--accent); color: var(--accent-text); }
-  input[type=range] { flex: 1; accent-color: var(--accent); height: 44px; }
-  .value { min-width: 64px; text-align: center; font-weight: 600; }
-  .notice { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 28px 20px; text-align: center; }
+  .icon svg { width: 22px; height: 22px; fill: currentColor; }
+  .card.on .icon { background: var(--accent); color: var(--accent-text); }
+  .label { flex: 1; min-width: 0; }
+  .name { font-weight: 600; overflow-wrap: anywhere; }
+  .state { color: var(--muted); font-size: 14px; }
+  .row { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+  .card[aria-busy="true"] .head > button, .card[aria-busy="true"] .row { opacity: .55; pointer-events: none; }
+
+  button { font: inherit; color: var(--text); cursor: pointer; }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .btn {
+    flex: 1; min-height: 44px; border: 1px solid var(--control); border-radius: 12px; background: var(--btn);
+    font-weight: 600;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .btn.run { background: transparent; border: 2px solid var(--accent); }
+
+  .switch { flex: none; height: 44px; width: 56px; padding: 0; border: 0; background: none; }
+  .switch span {
+    display: block; position: relative; height: 32px; border-radius: 16px; background: var(--btn);
+    border: 2px solid var(--control); transition: background .15s, border-color .15s;
+  }
+  .switch span::after {
+    content: ""; position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--control); transition: transform .15s, background .15s;
+  }
+  .switch[aria-checked="true"] span { background: var(--accent); border-color: var(--accent); }
+  .switch[aria-checked="true"] span::after { transform: translateX(24px); background: var(--accent-text); }
+
+  input[type=range] { flex: 1; accent-color: var(--accent); height: 44px; margin: 0; }
+  .value { min-width: 52px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .value.mid { text-align: center; min-width: 64px; }
+  .notice {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px 20px;
+    text-align: center;
+  }
   .notice p { color: var(--muted); margin: 8px 0 0; }
-  #expiry { color: var(--muted); font-size: 13px; text-align: center; margin: 24px 0 0; }
+  .notice small { display: block; color: var(--muted); margin-top: 16px; }
   #toast {
     position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #b91c1c; color: #fff;
     padding: 10px 16px; border-radius: 12px; opacity: 0; transition: opacity .2s; pointer-events: none;
   }
   #toast.show { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
 <main>
   <h1 id="title"></h1>
-  <div id="content"></div>
+  <p id="welcome"></p>
   <p id="expiry"></p>
+  <div id="content"></div>
 </main>
 <div id="toast" role="alert"></div>
 <script>
 (() => {
   const ES = (navigator.language || "en").toLowerCase().startsWith("es");
   const T = ES ? {
-    on: "Encendido", off: "Apagado", turn_on: "Encender", turn_off: "Apagar", open: "Abrir", close: "Cerrar",
-    stop: "Detener", activate: "Activar", lock: "Cerrar", unlock: "Abrir", locked: "Cerrado", unlocked: "Abierto",
+    on: "Encendido", off: "Apagado", open: "Abrir", close: "Cerrar", stop: "Detener", activate: "Activar",
+    lock: "Bloquear", unlock: "Desbloquear", locked: "Bloqueado", unlocked: "Desbloqueado",
     opened: "Abierto", closed: "Cerrado", play_pause: "Play / Pausa", start: "Iniciar", dock: "A la base",
-    unavailable: "No disponible", other: "Otros", failed: "No se pudo completar la acción",
+    unavailable: "No disponible", failed: "No se pudo completar la acción",
+    brightness: "Brillo", temp_down: "Bajar temperatura", temp_up: "Subir temperatura",
+    vol_down: "Bajar volumen", vol_up: "Subir volumen",
     wifi_title: "Conéctate al WiFi de la casa",
-    wifi_text: "Este panel solo funciona desde la red de la casa.", your_ip: "Tu dirección: ",
+    wifi_text: "Este panel solo funciona desde la red de la casa.",
+    your_ip: "Dato para el dueño de casa: tu dirección es ",
     off_title: "Panel no disponible", off_text: "El panel de invitados está desactivado.",
     empty: "Todavía no hay nada para manejar aquí.", offline: "Sin conexión. Reintentando…",
     link_title: "Este enlace ya no es válido",
-    link_text: "Pide al dueño de casa un código QR nuevo y escanéalo.", until: "Acceso hasta ",
+    link_text: "Pide al dueño de casa un código QR nuevo y escanéalo.",
+    until: "Acceso hasta ", soon: "Tu acceso termina en {n} min. Pide un código QR nuevo para seguir.",
   } : {
-    on: "On", off: "Off", turn_on: "Turn on", turn_off: "Turn off", open: "Open", close: "Close",
-    stop: "Stop", activate: "Activate", lock: "Lock", unlock: "Unlock", locked: "Locked", unlocked: "Unlocked",
+    on: "On", off: "Off", open: "Open", close: "Close", stop: "Stop", activate: "Activate",
+    lock: "Lock", unlock: "Unlock", locked: "Locked", unlocked: "Unlocked",
     opened: "Open", closed: "Closed", play_pause: "Play / Pause", start: "Start", dock: "Dock",
-    unavailable: "Unavailable", other: "Other", failed: "The action could not be completed",
-    wifi_title: "Connect to the home Wi-Fi",
-    wifi_text: "This panel only works from the home network.", your_ip: "Your address: ",
+    unavailable: "Unavailable", failed: "The action could not be completed",
+    brightness: "Brightness", temp_down: "Lower temperature", temp_up: "Raise temperature",
+    vol_down: "Volume down", vol_up: "Volume up",
+    wifi_title: "Connect to the home Wi‑Fi",
+    wifi_text: "This panel only works from the home network.",
+    your_ip: "For the host: your address is ",
     off_title: "Panel unavailable", off_text: "The guest panel is switched off.",
     empty: "Nothing to control here yet.", offline: "Offline. Retrying…",
     link_title: "This link is no longer valid",
-    link_text: "Ask your host for a new QR code and scan it.", until: "Access until ",
+    link_text: "Ask your host for a new QR code and scan it.",
+    until: "Access until ", soon: "Your access ends in {n} min. Ask for a new QR code to continue.",
   };
   const STATE_LABEL = { on: T.on, off: T.off, locked: T.locked, unlocked: T.unlocked, open: T.opened,
     closed: T.closed, unavailable: T.unavailable };
+  const SWITCHES = ["light", "switch", "input_boolean", "fan", "humidifier"];
+  const THEME_VARS = ["--bg", "--card", "--text", "--muted", "--line", "--accent", "--accent-text", "--btn", "--radius"];
 
+  const root = document.documentElement;
   const content = document.getElementById("content");
   const titleEl = document.getElementById("title");
-  const toastEl = document.getElementById("toast");
+  const welcomeEl = document.getElementById("welcome");
   const expiryEl = document.getElementById("expiry");
+  const toastEl = document.getElementById("toast");
+  const darkQuery = matchMedia("(prefers-color-scheme: dark)");
   let cards = new Map();
   let signature = null;
   let toastTimer;
+  let appearance = { mode: "auto", theme: {}, accent: null };
+  let appearanceKey = "";
 
   // The link token arrives in the address (?t=...) and is remembered so the page can be reopened until it expires.
   const TOKEN_KEY = "ha_guest_token";
@@ -112,6 +160,36 @@
     return node;
   };
 
+  // Black or white, whichever reads better on the given colour.
+  function textOn(color) {
+    const probe = el("span");
+    probe.style.color = color;
+    document.body.append(probe);
+    const rgb = getComputedStyle(probe).color.match(/[\d.]+/g) || [0, 0, 0];
+    probe.remove();
+    const [r, g, b] = rgb.slice(0, 3).map(v => {
+      const c = v / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.35 ? "#16181d" : "#ffffff";
+  }
+
+  function applyTheme() {
+    const dark = appearance.mode === "dark" || (appearance.mode !== "light" && darkQuery.matches);
+    root.dataset.mode = dark ? "dark" : "light";
+    THEME_VARS.forEach(name => root.style.removeProperty(name));
+    const vars = (appearance.theme || {})[dark ? "dark" : "light"] || {};
+    for (const [name, value] of Object.entries(vars)) {
+      if (THEME_VARS.includes(name)) root.style.setProperty(name, value);
+    }
+    if (appearance.accent) root.style.setProperty("--accent", appearance.accent);
+    if (appearance.accent || (vars["--accent"] && !vars["--accent-text"])) {
+      root.style.setProperty("--accent-text", textOn(getComputedStyle(root).getPropertyValue("--accent")));
+    }
+  }
+  darkQuery.addEventListener("change", applyTheme);
+  applyTheme();
+
   function toast(text) {
     toastEl.textContent = text;
     toastEl.classList.add("show");
@@ -119,7 +197,9 @@
     toastTimer = setTimeout(() => toastEl.classList.remove("show"), 3000);
   }
 
-  async function act(entity_id, action, value) {
+  // The card is dimmed and locked until Home Assistant answers, so a slow device is not toggled twice.
+  async function act(card, entity_id, action, value) {
+    card.setAttribute("aria-busy", "true");
     try {
       const res = await fetch("/api/ha_guest/action", {
         method: "POST", headers: { "Content-Type": "application/json", ...auth },
@@ -129,21 +209,28 @@
     } catch (err) {
       toast(T.failed);
     }
-    refresh();
+    await refresh();
+    card.removeAttribute("aria-busy");
   }
 
-  function button(label, onClick, primary) {
-    const b = el("button", primary ? "primary" : "", label);
+  function button(label, onClick, cls, ariaLabel) {
+    const b = el("button", "btn" + (cls ? " " + cls : ""), label);
     b.type = "button";
+    if (ariaLabel) b.setAttribute("aria-label", ariaLabel);
     b.addEventListener("click", onClick);
     return b;
   }
 
-  function slider(min, max, step, onChange) {
-    const input = el("input");
-    input.type = "range"; input.min = min; input.max = max; input.step = step;
-    input.addEventListener("change", () => onChange(Number(input.value)));
-    return input;
+  function iconNode(path) {
+    const wrap = el("span", "icon");
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    const shape = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    shape.setAttribute("d", path);
+    svg.append(shape);
+    wrap.append(svg);
+    return wrap;
   }
 
   function stateText(e) {
@@ -158,50 +245,82 @@
     const domain = id.split(".")[0];
     const card = el("div", "card");
     const head = el("div", "head");
-    const name = el("span", "name");
-    const state = el("span", "state");
-    head.append(name, state);
+    const label = el("div", "label");
+    const name = el("div", "name");
+    const state = el("div", "state");
+    label.append(name, state);
+    if (e.icon) head.append(iconNode(e.icon));
+    head.append(label);
     card.append(head);
     const row = () => { const r = el("div", "row"); card.append(r); return r; };
     const updaters = [];
 
-    if (["light", "switch", "input_boolean", "fan", "humidifier"].includes(domain)) {
-      const toggle = button("", () => act(id, "toggle"));
-      row().append(toggle);
+    if (SWITCHES.includes(domain)) {
+      const toggle = el("button", "switch");
+      toggle.type = "button";
+      toggle.setAttribute("role", "switch");
+      toggle.append(el("span"));
+      toggle.addEventListener("click", () => {
+        toggle.setAttribute("aria-checked", toggle.getAttribute("aria-checked") === "true" ? "false" : "true");
+        act(card, id, "toggle");
+      });
+      head.append(toggle);
       updaters.push(x => {
-        toggle.textContent = x.state === "on" ? T.turn_off : T.turn_on;
-        toggle.className = x.state === "on" ? "primary" : "";
+        toggle.setAttribute("aria-label", x.name);
+        toggle.setAttribute("aria-checked", x.state === "on" ? "true" : "false");
+        toggle.disabled = x.state === "unavailable";
       });
       const modes = e.attributes.supported_color_modes || [];
       if (domain === "light" && modes.some(m => m !== "onoff")) {
-        const s = slider(1, 100, 1, v => act(id, "brightness", v));
-        row().append(s);
+        const r = row();
+        const input = el("input");
+        input.type = "range"; input.min = 1; input.max = 100; input.step = 1;
+        const value = el("span", "value");
+        input.addEventListener("input", () => { value.textContent = `${input.value}%`; });
+        input.addEventListener("change", () => act(card, id, "brightness", Number(input.value)));
+        r.append(input, value);
         updaters.push(x => {
-          if (document.activeElement !== s && x.attributes.brightness != null)
-            s.value = Math.max(1, Math.round(x.attributes.brightness / 2.55));
+          input.setAttribute("aria-label", `${T.brightness}, ${x.name}`);
+          r.hidden = x.state !== "on";
+          if (document.activeElement !== input && x.attributes.brightness != null) {
+            input.value = Math.max(1, Math.round(x.attributes.brightness / 2.55));
+            value.textContent = `${input.value}%`;
+          }
         });
       }
     } else if (domain === "cover" || domain === "valve") {
       const r = row();
-      r.append(button(T.open, () => act(id, "open")));
-      if (domain === "cover") r.append(button(T.stop, () => act(id, "stop")));
-      r.append(button(T.close, () => act(id, "close")));
+      const open = button(T.open, () => act(card, id, "open"));
+      const close = button(T.close, () => act(card, id, "close"));
+      r.append(open);
+      if (domain === "cover") r.append(button(T.stop, () => act(card, id, "stop")));
+      r.append(close);
+      updaters.push(x => {
+        const position = x.attributes.current_position;
+        open.disabled = position != null ? position >= 100 : x.state === "open";
+        close.disabled = x.state === "closed";
+      });
     } else if (["scene", "script", "button", "input_button"].includes(domain)) {
-      row().append(button(T.activate, () => act(id, "activate"), true));
+      row().append(button(T.activate, () => act(card, id, "activate"), "run"));
       updaters.push(() => { state.textContent = ""; });
     } else if (domain === "lock") {
       const r = row();
-      r.append(button(T.unlock, () => act(id, "unlock")), button(T.lock, () => act(id, "lock")));
+      const unlock = button(T.unlock, () => act(card, id, "unlock"));
+      const lock = button(T.lock, () => act(card, id, "lock"));
+      r.append(unlock, lock);
+      updaters.push(x => {
+        unlock.disabled = x.state === "unlocked";
+        lock.disabled = x.state === "locked";
+      });
     } else if (domain === "climate") {
       const r = row();
-      const value = el("span", "value");
+      const value = el("span", "value mid");
       let target = null;
       const change = delta => {
-        if (target == null) return;
-        act(id, "temperature", Math.round((target + delta) * 10) / 10);
+        if (target != null) act(card, id, "temperature", Math.round((target + delta) * 10) / 10);
       };
       const step = e.attributes.target_temp_step || 0.5;
-      r.append(button("−", () => change(-step)), value, button("+", () => change(step)));
+      r.append(button("−", () => change(-step), "", T.temp_down), value, button("+", () => change(step), "", T.temp_up));
       updaters.push(x => {
         target = x.attributes.temperature ?? null;
         value.textContent = target == null ? "–" : `${target}°`;
@@ -210,20 +329,21 @@
       });
     } else if (domain === "media_player") {
       const r = row();
-      r.append(button("−", () => act(id, "volume_down")), button(T.play_pause, () => act(id, "play_pause"), true),
-        button("+", () => act(id, "volume_up")));
+      r.append(button("−", () => act(card, id, "volume_down"), "", T.vol_down),
+        button(T.play_pause, () => act(card, id, "play_pause")),
+        button("+", () => act(card, id, "volume_up"), "", T.vol_up));
       updaters.push(x => {
         if (x.attributes.media_title) state.textContent = x.attributes.media_title;
       });
     } else if (domain === "vacuum") {
       const r = row();
-      r.append(button(T.start, () => act(id, "start"), true), button(T.dock, () => act(id, "dock")));
+      r.append(button(T.start, () => act(card, id, "start")), button(T.dock, () => act(card, id, "dock")));
     }
 
     const update = x => {
       name.textContent = x.name;
       state.textContent = stateText(x);
-      card.classList.toggle("on", ["on", "open", "playing", "unlocked"].includes(x.state));
+      card.classList.toggle("on", ["on", "open", "playing", "unlocked", "heat", "cool", "cleaning"].includes(x.state));
       updaters.forEach(fn => fn(x));
     };
     update(e);
@@ -235,33 +355,42 @@
     cards = new Map();
     const box = el("div", "notice");
     box.append(el("strong", "", title), el("p", "", text));
-    if (extra) box.append(el("p", "", extra));
+    if (extra) box.append(el("small", "", extra));
     content.replaceChildren(box);
+  }
+
+  function showExpiry(expires) {
+    if (!expires) { expiryEl.textContent = ""; expiryEl.className = ""; return; }
+    const minutes = Math.max(0, Math.ceil((expires * 1000 - Date.now()) / 60000));
+    const soon = minutes <= 15;
+    expiryEl.className = soon ? "soon" : "";
+    expiryEl.textContent = soon ? T.soon.replace("{n}", minutes)
+      : T.until + new Date(expires * 1000).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
   }
 
   function render(data) {
     titleEl.textContent = data.title;
     document.title = data.title;
-    expiryEl.textContent = data.expires
-      ? T.until + new Date(data.expires * 1000).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })
-      : "";
-    if (!data.entities.length) return notice(data.title, T.empty);
+    welcomeEl.textContent = data.appearance.welcome;
+    showExpiry(data.expires);
+    const key = JSON.stringify(data.appearance);
+    if (key !== appearanceKey) {
+      appearanceKey = key;
+      appearance = data.appearance;
+      applyTheme();
+    }
+    if (!data.sections.length) return notice(data.title, T.empty);
 
-    const next = data.entities.map(e => `${e.entity_id}|${e.area || ""}`).join(",");
+    const all = data.sections.flatMap(s => s.entities);
+    const next = data.sections.map(s => `${s.title || ""}:${s.entities.map(e => e.entity_id + (e.icon || "")).join(",")}`).join("|");
     if (next !== signature) {
       signature = next;
       cards = new Map();
-      const groups = new Map();
-      for (const e of data.entities) {
-        const area = e.area || T.other;
-        if (!groups.has(area)) groups.set(area, []);
-        groups.get(area).push(e);
-      }
       const nodes = [];
-      for (const [area, list] of groups) {
-        if (groups.size > 1) nodes.push(el("h2", "", area));
+      for (const section of data.sections) {
+        if (section.title) nodes.push(el("h2", "", section.title));
         const grid = el("div", "grid");
-        for (const e of list) {
+        for (const e of section.entities) {
           const built = buildCard(e);
           cards.set(e.entity_id, built.update);
           grid.append(built.card);
@@ -270,7 +399,7 @@
       }
       content.replaceChildren(...nodes);
     } else {
-      for (const e of data.entities) cards.get(e.entity_id)?.(e);
+      for (const e of all) cards.get(e.entity_id)?.(e);
     }
   }
 
@@ -282,21 +411,19 @@
       if (!cards.size) notice(T.offline, "");
       return;
     }
-    if (res.status === 403) {
-      const body = await res.json().catch(() => ({}));
-      titleEl.textContent = "";
-      expiryEl.textContent = "";
-      if (body.error === "link") return notice(T.link_title, T.link_text);
-      return notice(T.wifi_title, T.wifi_text, body.ip ? T.your_ip + body.ip : "");
-    }
     if (!res.ok) {
       titleEl.textContent = "";
-      return notice(T.off_title, T.off_text);
+      welcomeEl.textContent = "";
+      showExpiry(null);
+      if (res.status !== 403) return notice(T.off_title, T.off_text);
+      const body = await res.json().catch(() => ({}));
+      if (body.error === "link") return notice(T.link_title, T.link_text);
+      return notice(T.wifi_title, T.wifi_text, body.ip ? T.your_ip + body.ip : "");
     }
     render(await res.json());
   }
 
-  document.documentElement.lang = ES ? "es" : "en";
+  root.lang = ES ? "es" : "en";
   refresh();
   setInterval(() => { if (!document.hidden) refresh(); }, 3000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });

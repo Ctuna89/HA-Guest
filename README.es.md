@@ -37,6 +37,42 @@ El invitado entra a `http://<ip-de-home-assistant>:8123/guest`. Lo más cómodo 
 dirección. Desde otra red, la página solo muestra «Conéctate al WiFi de la casa» junto a la dirección IP que
 Home Assistant ve, lo que sirve para ajustar las redes permitidas.
 
+### Personalizar el aspecto
+
+La página sigue cómo ya tienes configurado tu Home Assistant, y el resto está en **Configurar → Apariencia del
+panel de invitados**:
+
+- **Nombres e iconos** son los que tus entidades tienen en Home Assistant. Cámbialos ahí y la página de
+  invitados los toma.
+- **Tema:** cualquier tema instalado en tu Home Assistant (`frontend: themes:` o temas de HACS). Se aplican sus
+  colores, sus variantes clara y oscura y el radio de las tarjetas.
+- **Modo claro u oscuro**, un **color de acento** (`#rrggbb`) que reemplaza el color principal del tema, y si se
+  **muestran iconos**.
+- **Mensaje de bienvenida:** se muestra bajo el título, por ejemplo las reglas de la casa.
+- **Diseño (YAML):** por defecto las entidades se agrupan por área. Para elegir el orden, las secciones y los
+  nombres e iconos de cada tarjeta, escribe un diseño con el mismo estilo que una tarjeta de entidades:
+
+  ```yaml
+  - title: Living
+    entities:
+      - entity: light.living_room
+        name: Luces del techo
+        icon: mdi:ceiling-light
+      - cover.curtain
+  - title: Escenas
+    entities:
+      - entity: scene.movie_night
+        icon: mdi:movie-open
+  ```
+
+  El diseño solo ordena las tarjetas. Los invitados siguen pudiendo usar únicamente las entidades de la lista
+  del panel, y el formulario te avisa si el diseño nombra una que no está en ella.
+
+<img src="docs/guest-themed.png" alt="Panel de invitados con un tema de Home Assistant y un diseño propio" width="320">
+
+Los valores de un tema que apuntan a otras variables (`var(--…)`) se omiten, porque no se pueden resolver fuera
+de Home Assistant. La página no es un panel Lovelace: no ejecuta tarjetas personalizadas.
+
 ### Enlaces que vencen (códigos QR)
 
 Estar en el WiFi no siempre basta: alguien a quien invitaste una vez podría volver otro día, pararse al alcance
@@ -45,7 +81,8 @@ de la red y apagarte las luces. Para evitarlo, pon en **Duración del enlace de 
 - La dirección `/guest` a secas deja de funcionar. El invitado necesita un enlace con un código, y cada enlace
   sirve solo esa cantidad de horas desde que se creó.
 - Los enlaces se crean en la página **Guest QR** de la barra lateral de Home Assistant, que muestra un código QR
-  nuevo cada vez que se abre. El invitado lo escanea con la cámara del teléfono, conectado a tu WiFi.
+  nuevo cada vez que se abre. El invitado lo escanea con la cámara del teléfono, conectado a tu WiFi, o le
+  envías el enlace con **Compartir enlace** / **Copiar enlace**.
 - **Cualquier usuario de Home Assistant de tu casa puede crear códigos**, sea o no administrador, desde la app
   o el navegador, incluso estando fuera de casa. Los usuarios restringidos (ver más abajo) no pueden.
 - Cuando el enlace vence, el invitado ve «Este enlace ya no es válido» y debe escanear un código nuevo.
@@ -69,11 +106,14 @@ inverso, configura `trusted_proxies` en `http:` para que Home Assistant vea la I
      [Family Location](https://github.com/Ctuna89/HA-Family-Location), incluidos los botones de check-in y de
      pedir ayuda.
    - **Entidades permitidas solo en casa:** p. ej. las luces del living.
-   - **Entidad que indica que está en casa** y sus **estados**: normalmente el sensor de conexión WiFi de su
+   - **Entidad que indica que está en casa**: normalmente el sensor de conexión WiFi de su
      teléfono (`sensor.<teléfono>_wifi_connection` en Android, `sensor.<teléfono>_ssid` en iPhone) y el nombre de
      tu WiFi. También puedes usar un `device_tracker` de tu router con el estado `home`, que es más difícil de
      engañar que el nombre de la red.
    - **Fuera de casa, mostrarlas como solo lectura:** si está apagado, fuera de casa no le aparecen.
+4. El paso siguiente muestra **qué informa esa entidad en ese momento** y lo propone como estado de «en casa».
+   Si el teléfono está en tu WiFi en ese instante, acéptalo; un estado que no coincide exactamente nunca da
+   acceso.
 
 Todo lo que no esté en esas listas deja de verlo y de poder manejarlo. Home Assistant aplica la restricción en
 el servidor, así que vale igual para la app, el navegador y la API.

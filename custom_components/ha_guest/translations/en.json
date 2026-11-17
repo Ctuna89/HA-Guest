@@ -34,7 +34,8 @@
           "add_user": "Restrict a user",
           "edit_user": "Edit a restricted user",
           "remove_user": "Stop restricting a user",
-          "revoke_links": "Revoke all guest links"
+          "revoke_links": "Revoke all guest links",
+          "appearance": "Guest panel appearance"
         }
       },
       "panel": {
@@ -73,7 +74,6 @@
           "family_location": "Include Family Location",
           "home_entities": "Entities allowed only at home",
           "condition_entity": "Entity that shows they are home",
-          "condition_states": "States that count as «home»",
           "away_read": "When away, show them read-only"
         },
         "data_description": {
@@ -81,9 +81,9 @@
           "family_location": "Always allows the map (people and zones) and the Family Location entities, including the check-in and ask-for-help buttons.",
           "home_entities": "They can see and control these only while the condition below is met.",
           "condition_entity": "Usually the Wi-Fi connection sensor of their phone (Home Assistant app). A device_tracker from your router also works.",
-          "condition_states": "Your Wi-Fi name (SSID), exactly as the sensor shows it. For a device_tracker, type home.",
           "away_read": "If off, these entities do not appear to them while away."
-        }
+        },
+        "description": "In the next step you say which state of the entity means «home»."
       },
       "remove_user": {
         "title": "Stop restricting",
@@ -95,15 +95,60 @@
       "revoke_links": {
         "title": "Revoke guest links",
         "description": "Every link and QR code handed out so far stops working immediately. Guests will have to scan a new code."
+      },
+      "appearance": {
+        "title": "Guest panel appearance",
+        "description": "Entity names and icons are the ones you already have in Home Assistant. Here you choose the theme, the colours and, if you want, the order and sections.",
+        "data": {
+          "theme": "Theme",
+          "mode": "Light or dark mode",
+          "accent": "Accent colour",
+          "welcome": "Welcome message",
+          "show_icons": "Show icons",
+          "layout": "Layout (YAML)"
+        },
+        "data_description": {
+          "theme": "Any theme installed in your Home Assistant.",
+          "accent": "Optional, as #rrggbb. Replaces the theme's primary colour.",
+          "welcome": "Optional. Shown under the title; for example the house rules.",
+          "layout": "Optional. A list of sections with a title and entities, as in an entities card; each entity can have its own name and icon. Leave it empty to group by area."
+        }
+      },
+      "home_state": {
+        "title": "When are they home?",
+        "description": "Right now **{entity}** reports: **{state}**\n\nIf that phone is connected to your Wi-Fi at this moment, that is the value to use. It must match exactly; if it does not, the person will never get their «home» access.",
+        "data": {
+          "condition_states": "States that count as «home»"
+        },
+        "data_description": {
+          "condition_states": "Your Wi-Fi name (SSID), exactly as the sensor shows it. For a device_tracker, type home."
+        }
       }
     },
     "error": {
       "invalid_network": "One of the networks is not valid. Use the format 192.168.1.0/24.",
-      "no_states": "Enter at least one state."
+      "no_states": "Enter at least one state.",
+      "invalid_color": "Use a colour in #rrggbb format, for example #ff9800.",
+      "invalid_layout": "The layout is not valid. It must be a list of sections, each with «entities».",
+      "layout_not_allowed": "The layout uses entities that are not on the guest panel's list: {entity}"
     },
     "abort": {
       "no_users": "There are no users to restrict. First create a non-administrator user in Settings → People.",
       "links_revoked": "All guest links were revoked."
+    }
+  },
+  "selector": {
+    "theme": {
+      "options": {
+        "default": "HA Guest default"
+      }
+    },
+    "mode": {
+      "options": {
+        "auto": "Follow the guest's phone",
+        "light": "Light",
+        "dark": "Dark"
+      }
     }
   }
 }

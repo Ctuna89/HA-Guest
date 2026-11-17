@@ -37,7 +37,7 @@ async def test_panel_lists_and_controls_only_allowed_entities(hass, hass_client_
     assert (await client.get("/guest")).status == 200
     data = await (await client.get("/api/ha_guest/states")).json()
     assert data["title"] == "Casa"
-    assert [e["entity_id"] for e in data["entities"]] == [LIVING]
+    assert [e["entity_id"] for s in data["sections"] for e in s["entities"]] == [LIVING]
 
     res = await client.post("/api/ha_guest/action", json={"entity_id": LIVING, "action": "turn_on"})
     assert res.status == 200
@@ -96,6 +96,12 @@ def _user_conf(**extra):
         "always_entities": [ALWAYS], "family_location": False, "home_entities": [LIVING],
         "condition_entity": WIFI, "condition_states": ["MiWifi"], "away_read": False, **extra,
     }
+
+
+def _user_form():
+    conf = _user_conf()
+    conf.pop("condition_states")
+    return conf
 
 
 async def test_restricted_user_controls_home_entities_only_on_wifi(hass):
@@ -170,18 +176,25 @@ async def test_config_and_options_flow(hass):
     await hass.async_block_till_done()
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert result["menu_options"] == ["panel", "add_user"]
+    assert result["menu_options"] == ["panel", "appearance", "add_user"]
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "add_user"})
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"user": user.id})
     assert result["step_id"] == "user_settings"
-    result = await hass.config_entries.options.async_configure(result["flow_id"], _user_conf())
+    hass.states.async_set(WIFI, "MiWifi", {"friendly_name": "Phone Wi-Fi"})
+    result = await hass.config_entries.options.async_configure(result["flow_id"], _user_form())
+    # The second step shows what the sensor reports now and offers it as the answer.
+    assert result["step_id"] == "home_state"
+    assert result["description_placeholders"] == {"entity": "Phone Wi-Fi", "state": "MiWifi"}
+    schema_key = next(iter(result["data_schema"].schema))
+    assert schema_key.description == {"suggested_value": ["MiWifi"]}
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"condition_states": ["MiWifi"]})
     assert result["type"] is FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
     assert entry.options["users"][user.id]["condition_states"] == ["MiWifi"]
     assert [g.id for g in user.groups] == [group_id(user.id)]
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert result["menu_options"] == ["panel", "add_user", "edit_user", "remove_user"]
+    assert result["menu_options"] == ["panel", "appearance", "add_user", "edit_user", "remove_user"]
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "remove_user"})
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"user": [user.id]})
     await hass.async_block_till_done()
@@ -280,3 +293,58 @@ async def test_who_can_invite(hass, hass_ws_client):
     assert result["result"]["url"].endswith("/guest")
     assert (await invite_as(guest))["error"]["code"] == "unauthorized"
     assert "guest-qr" in hass.data["frontend_panels"]
+
+
+async def test_appearance(hass, hass_client_no_auth, entity_registry):
+    """Theme, accent, welcome text and a layout with the owner's own names and icons."""
+    entry = await _setup(hass, panel={"entities": [LIVING, BEDROOM]})
+    hass.data["frontend_themes"] = {
+        "Ocean": {
+            "primary-color": "#0277bd", "card-background-color": "var(--other)",
+            "modes": {"dark": {"primary-background-color": "#001018"}},
+        }
+    }
+    client = await hass_client_no_auth()
+
+    data = await (await client.get("/api/ha_guest/states")).json()
+    assert data["appearance"] == {"mode": "auto", "theme": {"light": {}, "dark": {}}, "accent": None, "welcome": ""}
+    assert [s["title"] for s in data["sections"]] == [None]
+    assert data["sections"][0]["entities"][0]["icon"].startswith("M")  # default icon for the domain
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "appearance"})
+    form = {"theme": "Ocean", "mode": "dark", "accent": "orange", "welcome": "Wi-Fi: casa123", "show_icons": True}
+    layout = [{"title": "Downstairs", "entities": [BEDROOM, {"entity": ALWAYS}]}]
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {**form, "layout": layout})
+    assert result["errors"] == {"accent": "invalid_color", "layout": "layout_not_allowed"}
+    assert result["description_placeholders"] == {"entity": ALWAYS}
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**form, "accent": "#ff9800", "layout": {"entities": "nope"}}
+    )
+    assert result["errors"] == {"layout": "invalid_layout"}
+    layout = [{"title": "Downstairs", "entities": [BEDROOM, {"entity": LIVING, "name": "Sofa", "icon": "mdi:sofa"}]}]
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**form, "accent": "#ff9800", "layout": layout}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+    data = await (await client.get("/api/ha_guest/states")).json()
+    assert data["appearance"] == {
+        "mode": "dark", "accent": "#ff9800", "welcome": "Wi-Fi: casa123",
+        "theme": {"light": {"--accent": "#0277bd"}, "dark": {"--accent": "#0277bd", "--bg": "#001018"}},
+    }
+    section, = data["sections"]
+    assert section["title"] == "Downstairs"
+    assert [(e["entity_id"], e["name"]) for e in section["entities"]] == [(BEDROOM, "bedroom"), (LIVING, "Sofa")]
+    default_icon, sofa_icon = (e["icon"] for e in section["entities"])
+    assert sofa_icon.startswith("M") and sofa_icon != default_icon
+
+    # An entity taken off the allowed list disappears even if the layout still names it.
+    panel = {**entry.options["panel"], "entities": [BEDROOM]}
+    hass.config_entries.async_update_entry(entry, options={**entry.options, "panel": panel})
+    await hass.async_block_till_done()
+    data = await (await client.get("/api/ha_guest/states")).json()
+    assert [e["entity_id"] for e in data["sections"][0]["entities"]] == [BEDROOM]
+    res = await client.post("/api/ha_guest/action", json={"entity_id": LIVING, "action": "turn_on"})
+    assert res.status == 403
