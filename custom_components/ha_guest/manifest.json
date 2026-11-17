@@ -1,0 +1,15 @@
+{
+  "domain": "ha_guest",
+  "name": "HA Guest",
+  "after_dependencies": ["cloud"],
+  "codeowners": ["@Ctuna89"],
+  "config_flow": true,
+  "dependencies": ["http"],
+  "documentation": "https://github.com/Ctuna89/HA-Guest",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/Ctuna89/HA-Guest/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

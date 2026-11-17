@@ -1,0 +1,99 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Panel de invitados",
+        "description": "Página en `/guest` para quien visita la casa: sin cuenta y sin app. Solo responde a dispositivos conectados a las redes que indiques.",
+        "data": {
+          "enabled": "Activar el panel de invitados",
+          "title": "Título de la página",
+          "networks": "Redes permitidas",
+          "entities": "Entidades que pueden manejar"
+        },
+        "data_description": {
+          "networks": "La red de tu WiFi en formato CIDR, por ejemplo 192.168.1.0/24. Puedes agregar varias.",
+          "entities": "Los sensores se muestran como solo lectura."
+        }
+      }
+    },
+    "error": {
+      "invalid_network": "Hay una red que no es válida. Usa el formato 192.168.1.0/24."
+    },
+    "abort": {
+      "single_instance_allowed": "Ya está configurada."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "HA Guest",
+        "menu_options": {
+          "panel": "Panel de invitados (sin cuenta)",
+          "add_user": "Restringir a un usuario",
+          "edit_user": "Editar un usuario restringido",
+          "remove_user": "Quitar la restricción a un usuario"
+        }
+      },
+      "panel": {
+        "title": "Panel de invitados",
+        "description": "Página en `/guest` para quien visita la casa: sin cuenta y sin app. Solo responde a dispositivos conectados a las redes que indiques.",
+        "data": {
+          "enabled": "Activar el panel de invitados",
+          "title": "Título de la página",
+          "networks": "Redes permitidas",
+          "entities": "Entidades que pueden manejar"
+        },
+        "data_description": {
+          "networks": "La red de tu WiFi en formato CIDR, por ejemplo 192.168.1.0/24. Puedes agregar varias.",
+          "entities": "Los sensores se muestran como solo lectura."
+        }
+      },
+      "add_user": {
+        "title": "Restringir a un usuario",
+        "description": "Elige un usuario de Home Assistant que no sea administrador. Dejará de ver y manejar todo lo que no le permitas en el paso siguiente.",
+        "data": {
+          "user": "Usuario"
+        }
+      },
+      "edit_user": {
+        "title": "Editar un usuario restringido",
+        "data": {
+          "user": "Usuario"
+        }
+      },
+      "user_settings": {
+        "title": "Permisos de {name}",
+        "data": {
+          "always_entities": "Entidades permitidas siempre",
+          "family_location": "Incluir Family Location",
+          "home_entities": "Entidades permitidas solo en casa",
+          "condition_entity": "Entidad que indica que está en casa",
+          "condition_states": "Estados que cuentan como «en casa»",
+          "away_read": "Fuera de casa, mostrarlas como solo lectura"
+        },
+        "data_description": {
+          "always_entities": "Las puede ver y manejar desde cualquier lugar.",
+          "family_location": "Permite siempre el mapa (personas y zonas) y las entidades de Family Location, incluidos los botones de check-in y de pedir ayuda.",
+          "home_entities": "Las puede ver y manejar solo mientras se cumple la condición de abajo.",
+          "condition_entity": "Normalmente el sensor de conexión WiFi de su teléfono (app de Home Assistant). También sirve un device_tracker de tu router.",
+          "condition_states": "El nombre de tu WiFi (SSID), tal como lo muestra el sensor. Para un device_tracker, escribe home.",
+          "away_read": "Si lo dejas apagado, fuera de casa esas entidades no le aparecen."
+        }
+      },
+      "remove_user": {
+        "title": "Quitar la restricción",
+        "description": "Los usuarios que elijas vuelven a tener el acceso normal de un usuario de Home Assistant.",
+        "data": {
+          "user": "Usuarios"
+        }
+      }
+    },
+    "error": {
+      "invalid_network": "Hay una red que no es válida. Usa el formato 192.168.1.0/24.",
+      "no_states": "Escribe al menos un estado."
+    },
+    "abort": {
+      "no_users": "No hay usuarios para restringir. Crea primero un usuario que no sea administrador en Ajustes → Personas."
+    }
+  }
+}

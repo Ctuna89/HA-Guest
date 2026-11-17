@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Invitados</title>
+<style>
+  :root {
+    --bg: #f3f4f6; --card: #ffffff; --text: #16181d; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #f59e0b; --accent-text: #1f1300; --btn: #eef0f3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --card: #1a1d24; --text: #f1f3f5; --muted: #9aa1ad; --line: #2a2e37;
+      --accent: #fbbf24; --accent-text: #1f1300; --btn: #262a33;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
+  }
+  main { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 8px 0 20px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 24px 0 10px; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+  .card.on { border-color: var(--accent); }
+  .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .name { font-weight: 600; overflow-wrap: anywhere; }
+  .state { color: var(--muted); font-size: 14px; white-space: nowrap; }
+  .row { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+  button {
+    flex: 1; min-height: 44px; border: 0; border-radius: 12px; background: var(--btn); color: var(--text);
+    font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button:active { transform: scale(.97); }
+  button.primary { background: var(--accent); color: var(--accent-text); }
+  input[type=range] { flex: 1; accent-color: var(--accent); height: 44px; }
+  .value { min-width: 64px; text-align: center; font-weight: 600; }
+  .notice { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 28px 20px; text-align: center; }
+  .notice p { color: var(--muted); margin: 8px 0 0; }
+  #toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #b91c1c; color: #fff;
+    padding: 10px 16px; border-radius: 12px; opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <div id="content"></div>
+</main>
+<div id="toast" role="alert"></div>
+<script>
+(() => {
+  const ES = (navigator.language || "es").toLowerCase().startsWith("es");
+  const T = ES ? {
+    on: "Encendido", off: "Apagado", turn_on: "Encender", turn_off: "Apagar", open: "Abrir", close: "Cerrar",
+    stop: "Detener", activate: "Activar", lock: "Cerrar", unlock: "Abrir", locked: "Cerrado", unlocked: "Abierto",
+    opened: "Abierto", closed: "Cerrado", play_pause: "Play / Pausa", start: "Iniciar", dock: "A la base",
+    unavailable: "No disponible", other: "Otros", failed: "No se pudo completar la acción",
+    wifi_title: "Conéctate al WiFi de la casa",
+    wifi_text: "Este panel solo funciona desde la red de la casa.", your_ip: "Tu dirección: ",
+    off_title: "Panel no disponible", off_text: "El panel de invitados está desactivado.",
+    empty: "Todavía no hay nada para manejar aquí.", offline: "Sin conexión. Reintentando…",
+  } : {
+    on: "On", off: "Off", turn_on: "Turn on", turn_off: "Turn off", open: "Open", close: "Close",
+    stop: "Stop", activate: "Activate", lock: "Lock", unlock: "Unlock", locked: "Locked", unlocked: "Unlocked",
+    opened: "Open", closed: "Closed", play_pause: "Play / Pause", start: "Start", dock: "Dock",
+    unavailable: "Unavailable", other: "Other", failed: "The action could not be completed",
+    wifi_title: "Connect to the home Wi-Fi",
+    wifi_text: "This panel only works from the home network.", your_ip: "Your address: ",
+    off_title: "Panel unavailable", off_text: "The guest panel is switched off.",
+    empty: "Nothing to control here yet.", offline: "Offline. Retrying…",
+  };
+  const STATE_LABEL = { on: T.on, off: T.off, locked: T.locked, unlocked: T.unlocked, open: T.opened,
+    closed: T.closed, unavailable: T.unavailable };
+
+  const content = document.getElementById("content");
+  const titleEl = document.getElementById("title");
+  const toastEl = document.getElementById("toast");
+  let cards = new Map();
+  let signature = null;
+  let toastTimer;
+
+  const el = (tag, cls, text) => {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+
+  function toast(text) {
+    toastEl.textContent = text;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove("show"), 3000);
+  }
+
+  async function act(entity_id, action, value) {
+    try {
+      const res = await fetch("/api/ha_guest/action", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entity_id, action, value }),
+      });
+      if (!res.ok) throw new Error();
+    } catch (err) {
+      toast(T.failed);
+    }
+    refresh();
+  }
+
+  function button(label, onClick, primary) {
+    const b = el("button", primary ? "primary" : "", label);
+    b.type = "button";
+    b.addEventListener("click", onClick);
+    return b;
+  }
+
+  function slider(min, max, step, onChange) {
+    const input = el("input");
+    input.type = "range"; input.min = min; input.max = max; input.step = step;
+    input.addEventListener("change", () => onChange(Number(input.value)));
+    return input;
+  }
+
+  function stateText(e) {
+    const unit = e.attributes.unit_of_measurement;
+    if (unit) return `${e.state} ${unit}`;
+    return STATE_LABEL[e.state] || e.state;
+  }
+
+  // Builds the card once and returns the function that refreshes it with new data.
+  function buildCard(e) {
+    const id = e.entity_id;
+    const domain = id.split(".")[0];
+    const card = el("div", "card");
+    const head = el("div", "head");
+    const name = el("span", "name");
+    const state = el("span", "state");
+    head.append(name, state);
+    card.append(head);
+    const row = () => { const r = el("div", "row"); card.append(r); return r; };
+    const updaters = [];
+
+    if (["light", "switch", "input_boolean", "fan", "humidifier"].includes(domain)) {
+      const toggle = button("", () => act(id, "toggle"));
+      row().append(toggle);
+      updaters.push(x => {
+        toggle.textContent = x.state === "on" ? T.turn_off : T.turn_on;
+        toggle.className = x.state === "on" ? "primary" : "";
+      });
+      const modes = e.attributes.supported_color_modes || [];
+      if (domain === "light" && modes.some(m => m !== "onoff")) {
+        const s = slider(1, 100, 1, v => act(id, "brightness", v));
+        row().append(s);
+        updaters.push(x => {
+          if (document.activeElement !== s && x.attributes.brightness != null)
+            s.value = Math.max(1, Math.round(x.attributes.brightness / 2.55));
+        });
+      }
+    } else if (domain === "cover" || domain === "valve") {
+      const r = row();
+      r.append(button(T.open, () => act(id, "open")));
+      if (domain === "cover") r.append(button(T.stop, () => act(id, "stop")));
+      r.append(button(T.close, () => act(id, "close")));
+    } else if (["scene", "script", "button", "input_button"].includes(domain)) {
+      row().append(button(T.activate, () => act(id, "activate"), true));
+      updaters.push(() => { state.textContent = ""; });
+    } else if (domain === "lock") {
+      const r = row();
+      r.append(button(T.unlock, () => act(id, "unlock")), button(T.lock, () => act(id, "lock")));
+    } else if (domain === "climate") {
+      const r = row();
+      const value = el("span", "value");
+      let target = null;
+      const change = delta => {
+        if (target == null) return;
+        act(id, "temperature", Math.round((target + delta) * 10) / 10);
+      };
+      const step = e.attributes.target_temp_step || 0.5;
+      r.append(button("−", () => change(-step)), value, button("+", () => change(step)));
+      updaters.push(x => {
+        target = x.attributes.temperature ?? null;
+        value.textContent = target == null ? "–" : `${target}°`;
+        const current = x.attributes.current_temperature;
+        state.textContent = (STATE_LABEL[x.state] || x.state) + (current != null ? ` · ${current}°` : "");
+      });
+    } else if (domain === "media_player") {
+      const r = row();
+      r.append(button("−", () => act(id, "volume_down")), button(T.play_pause, () => act(id, "play_pause"), true),
+        button("+", () => act(id, "volume_up")));
+      updaters.push(x => {
+        if (x.attributes.media_title) state.textContent = x.attributes.media_title;
+      });
+    } else if (domain === "vacuum") {
+      const r = row();
+      r.append(button(T.start, () => act(id, "start"), true), button(T.dock, () => act(id, "dock")));
+    }
+
+    const update = x => {
+      name.textContent = x.name;
+      state.textContent = stateText(x);
+      card.classList.toggle("on", ["on", "open", "playing", "unlocked"].includes(x.state));
+      updaters.forEach(fn => fn(x));
+    };
+    update(e);
+    return { card, update };
+  }
+
+  function notice(title, text, extra) {
+    signature = null;
+    cards = new Map();
+    const box = el("div", "notice");
+    box.append(el("strong", "", title), el("p", "", text));
+    if (extra) box.append(el("p", "", extra));
+    content.replaceChildren(box);
+  }
+
+  function render(data) {
+    titleEl.textContent = data.title;
+    document.title = data.title;
+    if (!data.entities.length) return notice(data.title, T.empty);
+
+    const next = data.entities.map(e => `${e.entity_id}|${e.area || ""}`).join(",");
+    if (next !== signature) {
+      signature = next;
+      cards = new Map();
+      const groups = new Map();
+      for (const e of data.entities) {
+        const area = e.area || T.other;
+        if (!groups.has(area)) groups.set(area, []);
+        groups.get(area).push(e);
+      }
+      const nodes = [];
+      for (const [area, list] of groups) {
+        if (groups.size > 1) nodes.push(el("h2", "", area));
+        const grid = el("div", "grid");
+        for (const e of list) {
+          const built = buildCard(e);
+          cards.set(e.entity_id, built.update);
+          grid.append(built.card);
+        }
+        nodes.push(grid);
+      }
+      content.replaceChildren(...nodes);
+    } else {
+      for (const e of data.entities) cards.get(e.entity_id)?.(e);
+    }
+  }
+
+  async function refresh() {
+    let res;
+    try {
+      res = await fetch("/api/ha_guest/states", { cache: "no-store" });
+    } catch (err) {
+      if (!cards.size) notice(T.offline, "");
+      return;
+    }
+    if (res.status === 403) {
+      const body = await res.json().catch(() => ({}));
+      titleEl.textContent = "";
+      return notice(T.wifi_title, T.wifi_text, body.ip ? T.your_ip + body.ip : "");
+    }
+    if (!res.ok) {
+      titleEl.textContent = "";
+      return notice(T.off_title, T.off_text);
+    }
+    render(await res.json());
+  }
+
+  document.documentElement.lang = ES ? "es" : "en";
+  refresh();
+  setInterval(() => { if (!document.hidden) refresh(); }, 3000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,99 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Guest panel",
+        "description": "A page at `/guest` for people visiting your home: no account, no app. It only answers devices connected to the networks you list.",
+        "data": {
+          "enabled": "Enable the guest panel",
+          "title": "Page title",
+          "networks": "Allowed networks",
+          "entities": "Entities guests can control"
+        },
+        "data_description": {
+          "networks": "Your Wi-Fi network in CIDR format, for example 192.168.1.0/24. You can add several.",
+          "entities": "Sensors are shown read-only."
+        }
+      }
+    },
+    "error": {
+      "invalid_network": "One of the networks is not valid. Use the format 192.168.1.0/24."
+    },
+    "abort": {
+      "single_instance_allowed": "Already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "HA Guest",
+        "menu_options": {
+          "panel": "Guest panel (no account)",
+          "add_user": "Restrict a user",
+          "edit_user": "Edit a restricted user",
+          "remove_user": "Stop restricting a user"
+        }
+      },
+      "panel": {
+        "title": "Guest panel",
+        "description": "A page at `/guest` for people visiting your home: no account, no app. It only answers devices connected to the networks you list.",
+        "data": {
+          "enabled": "Enable the guest panel",
+          "title": "Page title",
+          "networks": "Allowed networks",
+          "entities": "Entities guests can control"
+        },
+        "data_description": {
+          "networks": "Your Wi-Fi network in CIDR format, for example 192.168.1.0/24. You can add several.",
+          "entities": "Sensors are shown read-only."
+        }
+      },
+      "add_user": {
+        "title": "Restrict a user",
+        "description": "Pick a Home Assistant user who is not an administrator. They will stop seeing and controlling everything you do not allow in the next step.",
+        "data": {
+          "user": "User"
+        }
+      },
+      "edit_user": {
+        "title": "Edit a restricted user",
+        "data": {
+          "user": "User"
+        }
+      },
+      "user_settings": {
+        "title": "Permissions for {name}",
+        "data": {
+          "always_entities": "Entities always allowed",
+          "family_location": "Include Family Location",
+          "home_entities": "Entities allowed only at home",
+          "condition_entity": "Entity that shows they are home",
+          "condition_states": "States that count as «home»",
+          "away_read": "When away, show them read-only"
+        },
+        "data_description": {
+          "always_entities": "They can see and control these from anywhere.",
+          "family_location": "Always allows the map (people and zones) and the Family Location entities, including the check-in and ask-for-help buttons.",
+          "home_entities": "They can see and control these only while the condition below is met.",
+          "condition_entity": "Usually the Wi-Fi connection sensor of their phone (Home Assistant app). A device_tracker from your router also works.",
+          "condition_states": "Your Wi-Fi name (SSID), exactly as the sensor shows it. For a device_tracker, type home.",
+          "away_read": "If off, these entities do not appear to them while away."
+        }
+      },
+      "remove_user": {
+        "title": "Stop restricting",
+        "description": "The users you pick get the normal access of a Home Assistant user back.",
+        "data": {
+          "user": "Users"
+        }
+      }
+    },
+    "error": {
+      "invalid_network": "One of the networks is not valid. Use the format 192.168.1.0/24.",
+      "no_states": "Enter at least one state."
+    },
+    "abort": {
+      "no_users": "There are no users to restrict. First create a non-administrator user in Settings → People."
+    }
+  }
+}
