@@ -31,11 +31,12 @@
         "title": "HA Guest",
         "menu_options": {
           "panel": "Panel de invitados (sin cuenta)",
+          "appearance": "Apariencia del panel de invitados",
+          "safety": "Seguridad y avisos",
           "add_user": "Restringir a un usuario",
           "edit_user": "Editar un usuario restringido",
           "remove_user": "Quitar la restricción a un usuario",
-          "revoke_links": "Anular todos los enlaces de invitados",
-          "appearance": "Apariencia del panel de invitados"
+          "revoke_links": "Anular todos los enlaces de invitados"
         }
       },
       "panel": {
@@ -123,6 +124,24 @@
         "data_description": {
           "condition_states": "El nombre de tu WiFi (SSID), tal como lo muestra el sensor. Para un device_tracker, escribe home."
         }
+      },
+      "safety": {
+        "title": "Seguridad y avisos",
+        "description": "Cuándo funciona el panel de invitados y a quién se le avisa de lo que hacen los invitados. Además puedes pausarlo cuando quieras con el interruptor «Panel de invitados», desde tus paneles o automatizaciones.",
+        "data": {
+          "require_home": "Solo si hay alguien de la casa",
+          "condition_entity": "Solo mientras esta entidad…",
+          "condition_states": "…esté en uno de estos estados",
+          "notify": "Avisar a",
+          "notify_on": "Avisar cuando"
+        },
+        "data_description": {
+          "require_home": "El panel deja de funcionar si no hay ninguna persona de la casa en «home». Los usuarios restringidos (como un familiar que comparte su ubicación) no cuentan.",
+          "condition_entity": "Opcional, por ejemplo tu alarma.",
+          "condition_states": "Por ejemplo disarmed para una alarma desarmada.",
+          "notify": "Servicios de notificación, por ejemplo mobile_app_mi_telefono.",
+          "notify_on": "Todo queda además en el registro de Home Assistant y como evento ha_guest_event."
+        }
       }
     },
     "error": {
@@ -149,6 +168,25 @@
         "light": "Claro",
         "dark": "Oscuro"
       }
+    },
+    "notify_on": {
+      "options": {
+        "open": "Un invitado abre el panel",
+        "action": "Un invitado usa algo",
+        "blocked": "Alguien con un enlace vencido o con el panel pausado intenta entrar"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "in_use": {
+        "name": "En uso"
+      }
+    }
+  },
+  "device": {
+    "panel": {
+      "name": "Panel de invitados"
     }
   }
 }

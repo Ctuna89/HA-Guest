@@ -96,6 +96,43 @@ Home Assistant no puede ver el nombre del WiFi del visitante, solo su dirección
 restringe por red. El acceso remoto por Home Assistant Cloud (Nabu Casa) siempre se rechaza. Si usas un proxy
 inverso, configura `trusted_proxies` en `http:` para que Home Assistant vea la IP real del visitante.
 
+### Seguridad y avisos
+
+En **Configurar → Seguridad y avisos**:
+
+- **Solo si hay alguien de la casa:** el panel deja de responder si ninguna `person` está en `home`. Las
+  personas que son usuarios restringidos (un familiar que comparte su ubicación) no cuentan. Esto impide que
+  alguien a quien invitaste una vez se pare afuera, al alcance del WiFi, cuando no hay nadie.
+- **Solo mientras esta entidad esté en uno de estos estados:** por ejemplo tu alarma, `disarmed`.
+- **Avisar a** uno o más servicios de notificación (p. ej. `mobile_app_mi_telefono`) **cuando** un invitado abre
+  el panel, usa algo, o alguien es rechazado (enlace vencido o no válido, o panel pausado). Los intentos
+  repetidos del mismo invitado se avisan como mucho una vez por hora.
+
+Mientras está pausado, el invitado ve «El panel de invitados no está disponible ahora», sea cual sea el motivo,
+para que la página nunca revele que no hay nadie en casa.
+
+Todo lo que hacen los invitados queda en el **registro** de Home Assistant («Invitado (192.168.1.20) apagó Luces
+del living»), también en el historial de la propia entidad, y se dispara como evento `ha_guest_event` para tus
+automatizaciones:
+
+| `type` | Datos adicionales |
+|---|---|
+| `open` | |
+| `action` | `entity_id`, `name`, `action` (`turn_on`, `turn_off`, `open`, `brightness`…), `value` |
+| `blocked` | `reason`: `link` o `paused` |
+
+Todos los eventos llevan además `ip`, `link` (un identificador corto del enlace del invitado, cuando se exigen
+enlaces) y `link_expires`.
+
+La integración agrega dos entidades en un dispositivo «Panel de invitados»:
+
+- **`switch.guest_panel`**: pausa el panel sin tocar su configuración. Úsalo desde un panel o una automatización
+  (p. ej. apagarlo al armar la alarma); conserva su estado al reiniciar.
+- **`binary_sensor.guest_panel_in_use`**: encendido mientras un invitado tiene el panel abierto o lo usó en los
+  últimos 5 minutos, con la cantidad de invitados (`guests`) y `last_seen` como atributos.
+
+Los nombres de estas entidades dependen del idioma de tu Home Assistant al instalar la integración.
+
 ## Usuarios restringidos (con la app)
 
 1. Crea a la persona en *Ajustes → Personas* con un usuario **que no sea administrador** e instálale la app.

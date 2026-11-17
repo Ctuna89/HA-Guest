@@ -95,6 +95,41 @@ Home Assistant cannot see the name of a visitor's Wi-Fi, only their IP address: 
 restricted by network. Remote access through Home Assistant Cloud (Nabu Casa) is always rejected. If you use a
 reverse proxy, configure `trusted_proxies` under `http:` so Home Assistant sees the visitor's real IP.
 
+### Safety and notifications
+
+Under **Configure → Safety and notifications**:
+
+- **Only while someone from the household is home:** the panel stops answering when no `person` is `home`.
+  People who are restricted users (a relative sharing their location) do not count. This is what stops someone
+  you invited once from standing outside, within reach of the Wi-Fi, while nobody is in.
+- **Only while this entity is in one of these states:** for example your alarm, `disarmed`.
+- **Notify** one or more notify services (e.g. `mobile_app_my_phone`) **when** a guest opens the panel, uses
+  something, or someone is turned away (an expired or invalid link, or the panel is paused). Repeated attempts
+  from the same guest are reported at most once an hour.
+
+While paused, guests see «The guest panel is not available right now», whatever the reason, so the page never
+reveals that nobody is home.
+
+Everything guests do is recorded in the **logbook** («Guest (192.168.1.20) turned off Living room lights»),
+including on the entity's own history, and fired as an `ha_guest_event` event for automations:
+
+| `type` | Extra data |
+|---|---|
+| `open` | |
+| `action` | `entity_id`, `name`, `action` (`turn_on`, `turn_off`, `open`, `brightness`…), `value` |
+| `blocked` | `reason`: `link` or `paused` |
+
+Every event also has `ip`, `link` (a short id of the guest's link, when links are required) and `link_expires`.
+
+The integration adds two entities on a «Guest panel» device:
+
+- **`switch.guest_panel`**: pauses the panel without touching its settings. Use it from a dashboard or an
+  automation (e.g. off when the alarm is armed); it keeps its state across restarts.
+- **`binary_sensor.guest_panel_in_use`**: on while a guest has the panel open or used it in the last 5 minutes,
+  with the number of `guests` and `last_seen` as attributes.
+
+The entity ids above are for an English Home Assistant; they follow its language when the integration is added.
+
 ## Restricted users (with the app)
 
 1. Create the person in *Settings → People* with a user that is **not an administrator**, and install the app

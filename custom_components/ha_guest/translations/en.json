@@ -31,11 +31,12 @@
         "title": "HA Guest",
         "menu_options": {
           "panel": "Guest panel (no account)",
+          "appearance": "Guest panel appearance",
+          "safety": "Safety and notifications",
           "add_user": "Restrict a user",
           "edit_user": "Edit a restricted user",
           "remove_user": "Stop restricting a user",
-          "revoke_links": "Revoke all guest links",
-          "appearance": "Guest panel appearance"
+          "revoke_links": "Revoke all guest links"
         }
       },
       "panel": {
@@ -123,6 +124,24 @@
         "data_description": {
           "condition_states": "Your Wi-Fi name (SSID), exactly as the sensor shows it. For a device_tracker, type home."
         }
+      },
+      "safety": {
+        "title": "Safety and notifications",
+        "description": "When the guest panel works, and who hears about what guests do. You can also pause it at any time with the «Guest panel» switch, from your dashboards or automations.",
+        "data": {
+          "require_home": "Only while someone from the household is home",
+          "condition_entity": "Only while this entity…",
+          "condition_states": "…is in one of these states",
+          "notify": "Notify",
+          "notify_on": "Notify when"
+        },
+        "data_description": {
+          "require_home": "The panel stops working when no person of the household is «home». Restricted users (such as a relative who shares their location) do not count.",
+          "condition_entity": "Optional, for example your alarm.",
+          "condition_states": "For example disarmed for an alarm that is off.",
+          "notify": "Notify services, for example mobile_app_my_phone.",
+          "notify_on": "Everything is also recorded in Home Assistant's logbook and as an ha_guest_event event."
+        }
       }
     },
     "error": {
@@ -149,6 +168,25 @@
         "light": "Light",
         "dark": "Dark"
       }
+    },
+    "notify_on": {
+      "options": {
+        "open": "A guest opens the panel",
+        "action": "A guest uses something",
+        "blocked": "Someone with an expired link, or while the panel is paused, tries to get in"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "in_use": {
+        "name": "In use"
+      }
+    }
+  },
+  "device": {
+    "panel": {
+      "name": "Guest panel"
     }
   }
 }

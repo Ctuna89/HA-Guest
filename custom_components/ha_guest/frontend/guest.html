@@ -106,6 +106,8 @@
     wifi_text: "Este panel solo funciona desde la red de la casa.",
     your_ip: "Dato para el dueño de casa: tu dirección es ",
     off_title: "Panel no disponible", off_text: "El panel de invitados está desactivado.",
+    paused_title: "El panel de invitados no está disponible ahora",
+    paused_text: "Inténtalo más tarde o pregúntale al dueño de casa.",
     empty: "Todavía no hay nada para manejar aquí.", offline: "Sin conexión. Reintentando…",
     link_title: "Este enlace ya no es válido",
     link_text: "Pide al dueño de casa un código QR nuevo y escanéalo.",
@@ -121,6 +123,8 @@
     wifi_text: "This panel only works from the home network.",
     your_ip: "For the host: your address is ",
     off_title: "Panel unavailable", off_text: "The guest panel is switched off.",
+    paused_title: "The guest panel is not available right now",
+    paused_text: "Try again later or ask your host.",
     empty: "Nothing to control here yet.", offline: "Offline. Retrying…",
     link_title: "This link is no longer valid",
     link_text: "Ask your host for a new QR code and scan it.",
@@ -418,6 +422,7 @@
       if (res.status !== 403) return notice(T.off_title, T.off_text);
       const body = await res.json().catch(() => ({}));
       if (body.error === "link") return notice(T.link_title, T.link_text);
+      if (body.error === "paused") return notice(T.paused_title, T.paused_text);
       return notice(T.wifi_title, T.wifi_text, body.ip ? T.your_ip + body.ip : "");
     }
     render(await res.json());

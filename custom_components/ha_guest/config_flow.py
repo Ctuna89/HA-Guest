@@ -28,6 +28,12 @@ from .const import (
     CONF_LINK_HOURS,
     CONF_MODE,
     CONF_NETWORKS,
+    CONF_NOTIFY,
+    CONF_NOTIFY_ON,
+    CONF_PANEL_CONDITION_ENTITY,
+    CONF_PANEL_CONDITION_STATES,
+    CONF_REQUIRE_HOME,
+    CONF_SAFETY,
     CONF_PANEL,
     CONF_SECRET,
     CONF_SHOW_ICONS,
@@ -36,9 +42,11 @@ from .const import (
     CONF_USER,
     CONF_USERS,
     CONF_WELCOME,
+    DEFAULT_NOTIFY_ON,
     DEFAULT_THEME,
     DEFAULT_TITLE,
     DOMAIN,
+    NOTIFY_EVENTS,
 )
 from .invite import new_secret
 
@@ -139,7 +147,7 @@ class GuestOptionsFlow(OptionsFlow):
         }
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        options = ["panel", "appearance", "add_user"]
+        options = ["panel", "appearance", "safety", "add_user"]
         if self._users:
             options += ["edit_user", "remove_user"]
         if self.config_entry.options.get(CONF_PANEL, {}).get(CONF_LINK_HOURS):
@@ -200,6 +208,35 @@ class GuestOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="appearance", errors=errors, description_placeholders=placeholders,
             data_schema=self.add_suggested_values_to_schema(schema, user_input or current),
+        )
+
+    async def async_step_safety(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """When the panel answers, and who hears about what guests do."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            states = [s.strip() for s in user_input.get(CONF_PANEL_CONDITION_STATES, []) if s.strip()]
+            if user_input.get(CONF_PANEL_CONDITION_ENTITY) and not states:
+                errors[CONF_PANEL_CONDITION_STATES] = "no_states"
+            else:
+                safety = {**user_input, CONF_PANEL_CONDITION_STATES: states}
+                return self._save(**{CONF_SAFETY: safety})
+
+        services = sorted(s for s in self.hass.services.async_services_for_domain("notify") if s != "send_message")
+        schema = vol.Schema({
+            vol.Required(CONF_REQUIRE_HOME, default=False): selector.BooleanSelector(),
+            vol.Optional(CONF_PANEL_CONDITION_ENTITY): selector.EntitySelector(),
+            vol.Optional(CONF_PANEL_CONDITION_STATES, default=[]): TEXT_LIST,
+            vol.Optional(CONF_NOTIFY, default=[]): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=services, multiple=True, custom_value=True)
+            ),
+            vol.Required(CONF_NOTIFY_ON, default=DEFAULT_NOTIFY_ON): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=NOTIFY_EVENTS, multiple=True, translation_key=CONF_NOTIFY_ON)
+            ),
+        })
+        current = user_input or self.config_entry.options.get(CONF_SAFETY, {})
+        return self.async_show_form(
+            step_id="safety", errors=errors,
+            data_schema=self.add_suggested_values_to_schema(schema, current),
         )
 
     async def async_step_revoke_links(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:

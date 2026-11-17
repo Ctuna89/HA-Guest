@@ -1,7 +1,14 @@
 """Tests for the guest panel and the restricted users."""
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from datetime import timedelta
+
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_capture_events,
+    async_fire_time_changed,
+    async_mock_service,
+)
 
 from homeassistant.auth.const import GROUP_ID_USER
 from homeassistant.core import Context
@@ -18,12 +25,15 @@ ALWAYS = "input_boolean.always"
 WIFI = "sensor.phone_wifi"
 
 
-async def _setup(hass, panel=None, users=None):
+async def _setup(hass, panel=None, users=None, safety=None):
     assert await async_setup_component(
         hass, "input_boolean", {"input_boolean": {"living": None, "bedroom": None, "always": None}}
     )
     panel = {"enabled": True, "title": "Casa", "networks": ["127.0.0.0/8"], "entities": [LIVING], **(panel or {})}
-    entry = MockConfigEntry(domain=DOMAIN, options={"panel": panel, "users": users or {}})
+    options = {"panel": panel, "users": users or {}}
+    if safety is not None:
+        options["safety"] = safety
+    entry = MockConfigEntry(domain=DOMAIN, options=options)
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
@@ -176,7 +186,7 @@ async def test_config_and_options_flow(hass):
     await hass.async_block_till_done()
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert result["menu_options"] == ["panel", "appearance", "add_user"]
+    assert result["menu_options"] == ["panel", "appearance", "safety", "add_user"]
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "add_user"})
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"user": user.id})
     assert result["step_id"] == "user_settings"
@@ -194,7 +204,7 @@ async def test_config_and_options_flow(hass):
     assert [g.id for g in user.groups] == [group_id(user.id)]
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert result["menu_options"] == ["panel", "appearance", "add_user", "edit_user", "remove_user"]
+    assert result["menu_options"] == ["panel", "appearance", "safety", "add_user", "edit_user", "remove_user"]
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "remove_user"})
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"user": [user.id]})
     await hass.async_block_till_done()
@@ -348,3 +358,140 @@ async def test_appearance(hass, hass_client_no_auth, entity_registry):
     assert [e["entity_id"] for e in data["sections"][0]["entities"]] == [BEDROOM]
     res = await client.post("/api/ha_guest/action", json={"entity_id": LIVING, "action": "turn_on"})
     assert res.status == 403
+
+
+
+def _entity(entity_registry, entry, platform, key):
+    return entity_registry.async_get_entity_id(platform, DOMAIN, f"{entry.entry_id}_{key}")
+
+
+async def test_activity_is_logged_and_notified(hass, hass_client_no_auth, entity_registry, freezer):
+    notify = async_mock_service(hass, "notify", "phone")
+    events = async_capture_events(hass, "ha_guest_event")
+    entry = await _setup(hass, safety={"notify": ["phone"], "notify_on": ["open", "action", "blocked"]})
+    client = await hass_client_no_auth()
+    in_use = _entity(entity_registry, entry, "binary_sensor", "in_use")
+    assert hass.states.get(in_use).state == "off"
+
+    # Opening the page is one visit, however often it checks in.
+    for _ in range(3):
+        assert (await client.get("/api/ha_guest/states")).status == 200
+    await hass.async_block_till_done()
+    assert [e.data["type"] for e in events] == ["open"]
+    assert events[0].data["ip"] == "127.0.0.1"
+    assert hass.states.get(in_use).state == "on"
+    assert hass.states.get(in_use).attributes["guests"] == 1
+
+    # «toggle» is recorded as what it did, and the light's change carries the guest's context.
+    assert (await client.post("/api/ha_guest/action", json={"entity_id": LIVING, "action": "toggle"})).status == 200
+    await hass.async_block_till_done()
+    action = events[-1]
+    assert action.data | {"ip": None} == {
+        "type": "action", "entity_id": LIVING, "name": "living", "action": "turn_on", "value": None,
+        "ip": None, "link": None, "link_expires": None,
+    }
+    assert hass.states.get(LIVING).context.id == action.context.id
+    assert [c.data["message"] for c in notify] == [
+        "Guest (127.0.0.1) opened the guest panel.", "Guest (127.0.0.1) turned on living.",
+    ]
+    assert notify[0].data["title"] == "Guest panel"
+
+    freezer.tick(timedelta(minutes=6))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert hass.states.get(in_use).state == "off"
+
+
+async def test_logbook_description(hass):
+    from custom_components.ha_guest import logbook
+
+    described = {}
+    logbook.async_describe_events(hass, lambda domain, event, fn: described.setdefault(event, fn))
+
+    class FakeEvent:
+        data = {"type": "action", "entity_id": LIVING, "name": "Living", "action": "turn_off", "ip": "10.0.0.5"}
+
+    entry = described["ha_guest_event"](FakeEvent())
+    assert entry["name"] == "Guest (10.0.0.5)" and entry["message"] == "turned off Living"
+    assert entry["entity_id"] == LIVING
+
+    hass.config.language = "es"
+    FakeEvent.data = {"type": "blocked", "reason": "link", "ip": "10.0.0.5"}
+    entry = described["ha_guest_event"](FakeEvent())
+    assert entry["name"] == "Invitado (10.0.0.5)"
+    assert entry["message"] == "intentó entrar con un enlace de invitado vencido o no válido"
+
+
+async def test_old_link_is_reported_once(hass, hass_client_no_auth, hass_ws_client, freezer):
+    notify = async_mock_service(hass, "notify", "phone")
+    await _setup(hass, panel={"link_hours": 1}, safety={"notify": ["phone"], "notify_on": ["blocked"]})
+    client = await hass_client_no_auth()
+    ws = await hass_ws_client(hass)
+    headers = {"X-Guest-Token": (await _invite(ws))["result"]["url"].split("?t=")[1]}
+
+    assert (await client.get("/api/ha_guest/states")).status == 403  # no link at all: not reported
+    freezer.tick(timedelta(hours=2))
+    for _ in range(5):  # the page keeps checking in with its old link
+        assert (await client.get("/api/ha_guest/states", headers=headers)).status == 403
+    await hass.async_block_till_done()
+    assert [c.data["message"] for c in notify] == [
+        "Guest (127.0.0.1) tried to get in with an expired or invalid guest link."
+    ]
+
+
+async def test_panel_switch_and_conditions(hass, hass_client_no_auth, entity_registry):
+    guest = await _create_user(hass)
+    events = async_capture_events(hass, "ha_guest_event")
+    entry = await _setup(
+        hass, users={guest.id: _user_conf()},
+        safety={"require_home": True, "condition_entity": "alarm_control_panel.home", "condition_states": ["disarmed"]},
+    )
+    client = await hass_client_no_auth()
+    switch = _entity(entity_registry, entry, "switch", "panel")
+    assert hass.states.get(switch).state == "on"
+
+    async def status():
+        res = await client.get("/api/ha_guest/states")
+        return res.status, (await res.json()).get("error")
+
+    hass.states.async_set("alarm_control_panel.home", "disarmed")
+    # Only the restricted relative is home: that is not someone from the household.
+    hass.states.async_set("person.suegra", "home", {"user_id": guest.id})
+    assert await status() == (403, "paused")
+    hass.states.async_set("person.jaime", "home", {"user_id": "owner"})
+    assert await status() == (200, None)
+    hass.states.async_set("alarm_control_panel.home", "armed_away")
+    assert await status() == (403, "paused")
+    res = await client.post("/api/ha_guest/action", json={"entity_id": LIVING, "action": "turn_on"})
+    assert res.status == 403 and hass.states.get(LIVING).state == "off"
+    hass.states.async_set("alarm_control_panel.home", "disarmed")
+
+    await hass.services.async_call("switch", "turn_off", {"entity_id": switch}, blocking=True)
+    assert await status() == (403, "paused")
+    await hass.services.async_call("switch", "turn_on", {"entity_id": switch}, blocking=True)
+    assert await status() == (200, None)
+
+    # Being paused is reported once, and the switch survives a reload.
+    assert [e.data.get("reason") for e in events if e.data["type"] == "blocked"] == ["paused"]
+    await hass.services.async_call("switch", "turn_off", {"entity_id": switch}, blocking=True)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(switch).state == "off"
+    assert await status() == (403, "paused")
+
+
+async def test_safety_options_flow(hass):
+    async_mock_service(hass, "notify", "mobile_app_phone")
+    entry = await _setup(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "safety"})
+    form = {"require_home": True, "condition_entity": "alarm_control_panel.home", "condition_states": [" "],
+            "notify": ["mobile_app_phone"], "notify_on": ["blocked"]}
+    result = await hass.config_entries.options.async_configure(result["flow_id"], form)
+    assert result["errors"] == {"condition_states": "no_states"}
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**form, "condition_states": ["disarmed "]}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options["safety"]["condition_states"] == ["disarmed"]
+    assert entry.options["panel"]["entities"] == [LIVING]

@@ -22,6 +22,16 @@ CONF_SHOW_ICONS = "show_icons"
 CONF_LAYOUT = "layout"
 DEFAULT_THEME = "default"
 
+CONF_SAFETY = "safety"
+CONF_REQUIRE_HOME = "require_home"
+CONF_PANEL_CONDITION_ENTITY = "condition_entity"
+CONF_PANEL_CONDITION_STATES = "condition_states"
+CONF_NOTIFY = "notify"
+CONF_NOTIFY_ON = "notify_on"
+NOTIFY_EVENTS = ["open", "action", "blocked"]
+DEFAULT_NOTIFY_ON = ["open", "blocked"]
+EVENT_GUEST = "ha_guest_event"
+
 CONF_USERS = "users"
 CONF_USER = "user"
 CONF_ALWAYS_ENTITIES = "always_entities"

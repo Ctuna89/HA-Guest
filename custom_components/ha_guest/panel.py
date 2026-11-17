@@ -2,8 +2,9 @@
 
 It is the only door for account-less guests, so everything is checked here on every request: the request must
 come from one of the configured networks (never through Home Assistant Cloud), carry a link token that has not
-expired when expiring links are on, the entity must be on the panel's
-list, and the action must be one of the few this module knows how to translate into a service call.
+expired when expiring links are on, and arrive while the panel is open (its switch is on and the owner's
+conditions hold). The entity must be on the panel's list, and the action must be one of the few this module knows
+how to translate into a service call.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from typing import Any
 from aiohttp import web
 
 from homeassistant.components.http import HomeAssistantView
-from homeassistant.core import HomeAssistant, State
+from homeassistant.core import Context, HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
 from homeassistant.helpers.network import is_cloud_connection
@@ -43,6 +44,7 @@ from .const import (
     PANEL_URL,
     TOKEN_HEADER,
 )
+from .activity import Guest, GuestRuntime
 from .icons import async_icon_path
 from .invite import link_seconds, token_expiry
 
@@ -138,12 +140,13 @@ def resolve_action(state: State, action: Any, value: Any) -> tuple[str, dict[str
     raise InvalidAction
 
 
-def panel_config(hass: HomeAssistant) -> dict[str, Any] | None:
-    """The panel settings (plus the link secret), or None when the panel is off or the integration not loaded."""
+def panel_config(hass: HomeAssistant) -> tuple[GuestRuntime, dict[str, Any]] | None:
+    """The runtime and panel settings (plus link secret and appearance), or None when the panel is switched off
+    in the settings or the integration is not loaded."""
     for entry in hass.config_entries.async_loaded_entries(DOMAIN):
         conf = entry.options.get(CONF_PANEL, {})
         if conf.get(CONF_ENABLED):
-            return {
+            return entry.runtime_data, {
                 **conf,
                 CONF_SECRET: entry.data.get(CONF_SECRET, ""),
                 CONF_APPEARANCE: entry.options.get(CONF_APPEARANCE, {}),
@@ -255,21 +258,33 @@ async def async_build_sections(hass: HomeAssistant, conf: dict[str, Any]) -> lis
 class _GuestView(HomeAssistantView):
     requires_auth = False
 
-    def _guard(self, request: web.Request) -> tuple[HomeAssistant, dict[str, Any], int | None] | web.Response:
-        """Return (hass, panel settings, when the guest's link expires), or the response that turns them away."""
+    def _guard(
+        self, request: web.Request
+    ) -> tuple[HomeAssistant, dict[str, Any], GuestRuntime, Guest] | web.Response:
+        """Return (hass, panel settings, runtime, guest), or the response that turns the caller away."""
         hass = request.app["hass"]
-        conf = panel_config(hass)
-        if conf is None:
+        found = panel_config(hass)
+        if found is None:
             return self.json({"error": "disabled"}, HTTPStatus.NOT_FOUND)
+        runtime, conf = found
         if not network_allowed(hass, request, conf):
             # The caller's own address helps the owner work out which network to allow.
             return self.json({"error": "network", "ip": request.remote}, HTTPStatus.FORBIDDEN)
-        expires = None
+        guest = Guest(ip=str(request.remote))
         if lifetime := link_seconds(conf):
-            expires = token_expiry(conf[CONF_SECRET], request.headers.get(TOKEN_HEADER), lifetime)
+            token = request.headers.get(TOKEN_HEADER)
+            expires = token_expiry(conf[CONF_SECRET], token, lifetime)
             if expires is None:
+                # Opening the bare address is ordinary; presenting a link that no longer works is worth reporting.
+                if token:
+                    runtime.async_blocked(guest, "link")
                 return self.json({"error": "link"}, HTTPStatus.FORBIDDEN)
-        return hass, conf, expires
+            guest = Guest(ip=guest.ip, link=token.partition(".")[2][:8], expires=expires)
+        if not runtime.panel_open():
+            # The same answer whatever the reason: it must not tell someone outside that nobody is home.
+            runtime.async_blocked(guest, "paused")
+            return self.json({"error": "paused"}, HTTPStatus.FORBIDDEN)
+        return hass, conf, runtime, guest
 
 
 class GuestPageView(HomeAssistantView):
@@ -303,11 +318,12 @@ class GuestStatesView(_GuestView):
         guard = self._guard(request)
         if isinstance(guard, web.Response):
             return guard
-        hass, conf, expires = guard
+        hass, conf, runtime, guest = guard
+        runtime.async_seen(guest)
         appearance = conf.get(CONF_APPEARANCE, {})
         return self.json({
             "title": conf.get(CONF_TITLE) or DEFAULT_TITLE,
-            "expires": expires,
+            "expires": guest.expires,
             "appearance": {
                 "mode": appearance.get(CONF_MODE, "auto"),
                 "theme": theme_variables(hass, appearance.get(CONF_THEME)),
@@ -326,7 +342,7 @@ class GuestActionView(_GuestView):
         guard = self._guard(request)
         if isinstance(guard, web.Response):
             return guard
-        hass, conf, _ = guard
+        hass, conf, runtime, guest = guard
         # Requiring JSON keeps other websites the guest visits from posting here with a plain form.
         if request.content_type != "application/json":
             return self.json({"error": "invalid"}, HTTPStatus.BAD_REQUEST)
@@ -340,16 +356,23 @@ class GuestActionView(_GuestView):
         entity_id = body.get("entity_id")
         if entity_id not in conf.get(CONF_ENTITIES, []) or (state := hass.states.get(entity_id)) is None:
             return self.json({"error": "not_allowed"}, HTTPStatus.FORBIDDEN)
+        action, value = body.get("action"), body.get("value")
+        if action == "toggle":
+            # Decided here, from the state the guest saw, so the log says what actually happened.
+            action = "turn_off" if state.state == "on" else "turn_on"
         try:
-            service, data = resolve_action(state, body.get("action"), body.get("value"))
+            service, data = resolve_action(state, action, value)
         except InvalidAction:
             return self.json({"error": "invalid"}, HTTPStatus.BAD_REQUEST)
+        context = Context()
+        runtime.async_action(guest, state, action, value, context)
         try:
             await hass.services.async_call(
-                state.domain, service, {**data, "entity_id": entity_id}, blocking=True
+                state.domain, service, {**data, "entity_id": entity_id}, blocking=True, context=context
             )
         except (HomeAssistantError, ValueError):
             return self.json({"error": "failed"}, HTTPStatus.BAD_REQUEST)
+        runtime.async_action_done(guest, state, action, value)
         return self.json({"ok": True})
 
 

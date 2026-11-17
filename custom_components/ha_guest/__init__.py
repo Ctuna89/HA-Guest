@@ -11,18 +11,22 @@ Two kinds of guest:
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from .const import CONF_ENABLED, CONF_PANEL, CONF_SECRET, CONF_USERS, DOMAIN
+from .activity import GuestRuntime
 from .invite import async_setup_invites, async_show_invite_panel, new_secret
 from .panel import async_register_views
 from .permissions import GuestUserManager, async_release_users
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-type GuestConfigEntry = ConfigEntry[GuestUserManager]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.SWITCH]
+
+type GuestConfigEntry = ConfigEntry[GuestRuntime]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -35,16 +39,20 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: GuestConfigEntry) -> bool:
     if CONF_SECRET not in entry.data:
         hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_SECRET: new_secret()})
-    manager = GuestUserManager(hass, entry.options.get(CONF_USERS, {}))
-    await manager.async_start()
-    entry.runtime_data = manager
+    users = GuestUserManager(hass, entry.options.get(CONF_USERS, {}))
+    await users.async_start()
+    entry.runtime_data = GuestRuntime(hass, entry, users)
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     async_show_invite_panel(hass, bool(entry.options.get(CONF_PANEL, {}).get(CONF_ENABLED)))
     entry.async_on_unload(entry.add_update_listener(_reload))
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: GuestConfigEntry) -> bool:
-    await entry.runtime_data.async_stop()
+    if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        return False
+    await entry.runtime_data.users.async_stop()
+    entry.runtime_data.async_stop()
     async_show_invite_panel(hass, False)
     return True
 
