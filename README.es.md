@@ -217,7 +217,7 @@ el servidor, así que vale igual para la app, el navegador y la API.
 ## Desarrollo
 
 ```bash
-pip install pytest-homeassistant-custom-component
+pip install pytest-homeassistant-custom-component segno==1.6.6
 ```
 
 ```bash
