@@ -223,3 +223,9 @@ pip install pytest-homeassistant-custom-component
 ```bash
 pytest tests
 ```
+
+### Publicar una versión
+
+Las versiones las publica `.github/workflows/release.yml` cuando cambia `main`: sube `version` en
+`custom_components/ha_guest/manifest.json`, agrega su sección en `CHANGELOG.md` y fusiona en `main`. El workflow
+crea la versión `v<versión>` con esa sección como notas, y no hace nada si esa versión ya estaba publicada.

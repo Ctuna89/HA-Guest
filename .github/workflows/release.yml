@@ -1,0 +1,48 @@
+name: Release
+
+# Publishes a GitHub release for the version in manifest.json each time main changes.
+# Bumping the version (and adding its section to CHANGELOG.md) is what makes a new release;
+# a push that keeps the same version does nothing.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish the manifest version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(jq -r .version custom_components/ha_guest/manifest.json)
+          tag="v${version}"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
+            echo "${tag} already exists; nothing to publish."
+            exit 0
+          fi
+
+          if [ -f CHANGELOG.md ]; then
+            notes=$(mktemp)
+            # The lines under «## <version> ...», up to the next «## » heading.
+            awk -v v="$version" '
+              /^## / { if (found) exit; if ($2 == v) { found = 1; next } }
+              found { print }
+            ' CHANGELOG.md > "$notes"
+            if [ ! -s "$notes" ]; then
+              echo "CHANGELOG.md has no section for ${version}." >&2
+              exit 1
+            fi
+            gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" --notes-file "$notes"
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" --generate-notes
+          fi
