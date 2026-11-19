@@ -561,13 +561,13 @@ async def _save_dashboard(client, msg_id, config):
 
 
 async def test_dashboard_as_source(hass, hass_client_no_auth, hass_ws_client):
+    # Set up everything before the first client starts the web server: views cannot be added after that.
     assert await async_setup_component(hass, "lovelace", {})
+    await _setup(hass, panel={"source": "dashboard", "dashboard": "guest-view", "entities": []})
     ws = await hass_ws_client(hass)
     await ws.send_json({"id": 1, "type": "lovelace/dashboards/create", "url_path": "guest-view", "title": "Guests"})
     assert (await ws.receive_json())["success"]
     await _save_dashboard(ws, 2, GUEST_DASHBOARD)
-
-    await _setup(hass, panel={"source": "dashboard", "dashboard": "guest-view", "entities": []})
     client = await hass_client_no_auth()
     data = await (await client.get("/api/ha_guest/states")).json()
     assert [(s["title"], [(e["entity_id"], e["name"]) for e in s["entities"]]) for s in data["sections"]] == [
@@ -595,10 +595,10 @@ async def test_dashboard_as_source(hass, hass_client_no_auth, hass_ws_client):
 
 async def test_dashboard_choice_in_options(hass, hass_ws_client):
     assert await async_setup_component(hass, "lovelace", {})
+    entry = await _setup(hass)
     ws = await hass_ws_client(hass)
     await ws.send_json({"id": 1, "type": "lovelace/dashboards/create", "url_path": "guest-view", "title": "Guests"})
     assert (await ws.receive_json())["success"]
-    entry = await _setup(hass)
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "panel"})
