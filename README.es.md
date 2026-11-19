@@ -221,6 +221,10 @@ pip install pytest-homeassistant-custom-component segno==1.6.6
 ```
 
 ```bash
+python -c "import json, pathlib, homeassistant.components.frontend as f; print(*json.loads((pathlib.Path(f.__file__).parent / 'manifest.json').read_text())['requirements'])" | xargs pip install
+```
+
+```bash
 pytest tests
 ```
 
