@@ -8,18 +8,24 @@
           "enabled": "Activar el panel de invitados",
           "title": "Título de la página",
           "networks": "Redes permitidas",
+          "source": "Qué pueden manejar",
           "entities": "Entidades que pueden manejar",
+          "dashboard": "Dashboard",
           "link_hours": "Duración del enlace de invitados"
         },
         "data_description": {
           "networks": "La red de tu WiFi en formato CIDR, por ejemplo 192.168.1.0/24. Puedes agregar varias.",
-          "entities": "Los sensores se muestran como solo lectura.",
-          "link_hours": "Horas que sirve cada enlace o código QR. Al vencer, el invitado debe escanear un código nuevo. 0 = el enlace no vence y no hace falta código. Los códigos se crean en «Guest QR», en la barra lateral."
+          "entities": "Si eliges «Una lista de entidades». Los sensores se muestran como solo lectura.",
+          "link_hours": "Horas que sirve cada enlace o código QR. Al vencer, el invitado debe escanear un código nuevo. 0 = el enlace no vence y no hace falta código. Los códigos se crean en «Guest QR», en la barra lateral.",
+          "source": "Una lista de entidades, o todas las entidades de un dashboard que armes para los invitados.",
+          "dashboard": "Si eliges «Un dashboard». Los invitados ven sus entidades con los títulos, el orden, los nombres y los iconos de sus tarjetas, y solo pueden usar esas. Cuando cambias el dashboard, el panel cambia solo."
         }
       }
     },
     "error": {
-      "invalid_network": "Hay una red que no es válida. Usa el formato 192.168.1.0/24."
+      "invalid_network": "Hay una red que no es válida. Usa el formato 192.168.1.0/24.",
+      "no_dashboard": "Elige un dashboard.",
+      "dashboard_empty": "Ese dashboard no tiene tarjetas con entidades. El dashboard «Resumen» generado automáticamente no sirve hasta que lo edites; mejor crea uno para invitados."
     },
     "abort": {
       "single_instance_allowed": "Ya está configurada."
@@ -46,13 +52,17 @@
           "enabled": "Activar el panel de invitados",
           "title": "Título de la página",
           "networks": "Redes permitidas",
+          "source": "Qué pueden manejar",
           "entities": "Entidades que pueden manejar",
+          "dashboard": "Dashboard",
           "link_hours": "Duración del enlace de invitados"
         },
         "data_description": {
           "networks": "La red de tu WiFi en formato CIDR, por ejemplo 192.168.1.0/24. Puedes agregar varias.",
-          "entities": "Los sensores se muestran como solo lectura.",
-          "link_hours": "Horas que sirve cada enlace o código QR. Al vencer, el invitado debe escanear un código nuevo. 0 = el enlace no vence y no hace falta código. Los códigos se crean en «Guest QR», en la barra lateral."
+          "entities": "Si eliges «Una lista de entidades». Los sensores se muestran como solo lectura.",
+          "link_hours": "Horas que sirve cada enlace o código QR. Al vencer, el invitado debe escanear un código nuevo. 0 = el enlace no vence y no hace falta código. Los códigos se crean en «Guest QR», en la barra lateral.",
+          "source": "Una lista de entidades, o todas las entidades de un dashboard que armes para los invitados.",
+          "dashboard": "Si eliges «Un dashboard». Los invitados ven sus entidades con los títulos, el orden, los nombres y los iconos de sus tarjetas, y solo pueden usar esas. Cuando cambias el dashboard, el panel cambia solo."
         }
       },
       "add_user": {
@@ -112,7 +122,7 @@
           "theme": "Cualquier tema instalado en tu Home Assistant.",
           "accent": "Opcional, en formato #rrggbb. Reemplaza el color principal del tema.",
           "welcome": "Opcional. Se muestra bajo el título; por ejemplo las reglas de la casa.",
-          "layout": "Opcional. Lista de secciones con título y entidades, como en una tarjeta de entidades. Cada entidad puede llevar name, icon (uno, o uno por estado), states (el texto de cada estado) y buttons (el texto de cada botón). Si lo dejas vacío, se agrupan por área."
+          "layout": "Opcional. Lista de secciones con título y entidades, como en una tarjeta de entidades. Cada entidad puede llevar name, icon (uno, o uno por estado), states (el texto de cada estado) y buttons (el texto de cada botón). Si lo dejas vacío, se agrupan por área. Si el panel usa un dashboard, el diseño es el del dashboard y este campo no se usa."
         }
       },
       "home_state": {
@@ -149,7 +159,9 @@
       "no_states": "Escribe al menos un estado.",
       "invalid_color": "Usa un color en formato #rrggbb, por ejemplo #ff9800.",
       "invalid_layout": "El diseño no es válido. Debe ser una lista de secciones, cada una con «entities».",
-      "layout_not_allowed": "El diseño usa entidades que no están en la lista del panel de invitados: {entity}"
+      "layout_not_allowed": "El diseño usa entidades que no están en la lista del panel de invitados: {entity}",
+      "no_dashboard": "Elige un dashboard.",
+      "dashboard_empty": "Ese dashboard no tiene tarjetas con entidades. El dashboard «Resumen» generado automáticamente no sirve hasta que lo edites; mejor crea uno para invitados."
     },
     "abort": {
       "no_users": "No hay usuarios para restringir. Crea primero un usuario que no sea administrador en Ajustes → Personas.",
@@ -174,6 +186,12 @@
         "open": "Un invitado abre el panel",
         "action": "Un invitado usa algo",
         "blocked": "Alguien con un enlace vencido o con el panel pausado intenta entrar"
+      }
+    },
+    "source": {
+      "options": {
+        "entities": "Una lista de entidades",
+        "dashboard": "Un dashboard"
       }
     }
   },

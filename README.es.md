@@ -37,6 +37,26 @@ El invitado entra a `http://<ip-de-home-assistant>:8123/guest`. Lo más cómodo 
 dirección. Desde otra red, la página solo muestra «Conéctate al WiFi de la casa» junto a la dirección IP que
 Home Assistant ve, lo que sirve para ajustar las redes permitidas.
 
+### Usar un dashboard
+
+En vez de una lista de entidades, en **Qué pueden manejar** puedes elegir **Un dashboard**: arma un dashboard
+normal de Home Assistant para invitados (*Ajustes → Dashboards → Añadir dashboard*) y elígelo. Así los invitados:
+
+- ven todas las entidades que muestran las tarjetas del dashboard, bajo los títulos de sus vistas, sus tarjetas
+  de encabezado y los títulos de sus tarjetas, en el mismo orden, con los nombres e iconos puestos en las tarjetas;
+- solo pueden usar esas entidades. Si quitas una tarjeta del dashboard, el invitado pierde esa entidad al
+  instante; si agregas una, la gana.
+
+La página de invitados igual dibuja sus propias tarjetas: lee el dashboard, no lo muestra, así que los invitados
+no necesitan cuenta. Se entiende cualquier tarjeta que indique `entity` o `entities` (tile, botón, entidades,
+glance, luz, termostato, pilas, cuadrículas, tarjetas condicionales, picture elements y tarjetas personalizadas
+que usen esas claves). Las tarjetas que eligen entidades de otra forma, como la tarjeta de área, no aportan nada.
+El dashboard «Resumen» generado automáticamente no sirve hasta que lo edites. Con un dashboard como fuente, el
+diseño YAML de *Apariencia del panel de invitados* no se usa. En Home Assistant solo los administradores pueden
+editar dashboards, así que solo ellos pueden cambiar lo que manejan los invitados.
+
+<img src="docs/guest-dashboard.png" alt="Panel de invitados armado desde un dashboard" width="320">
+
 ### Personalizar el aspecto
 
 La página sigue cómo ya tienes configurado tu Home Assistant, y el resto está en **Configurar → Apariencia del

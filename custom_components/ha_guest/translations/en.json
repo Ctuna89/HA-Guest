@@ -8,18 +8,24 @@
           "enabled": "Enable the guest panel",
           "title": "Page title",
           "networks": "Allowed networks",
+          "source": "What guests can control",
           "entities": "Entities guests can control",
+          "dashboard": "Dashboard",
           "link_hours": "Guest link duration"
         },
         "data_description": {
           "networks": "Your Wi-Fi network in CIDR format, for example 192.168.1.0/24. You can add several.",
-          "entities": "Sensors are shown read-only.",
-          "link_hours": "Hours each link or QR code works for. Once it expires, the guest has to scan a new code. 0 = the link never expires and no code is needed. Codes are created under «Guest QR» in the sidebar."
+          "entities": "When «A list of entities» is chosen. Sensors are shown read-only.",
+          "link_hours": "Hours each link or QR code works for. Once it expires, the guest has to scan a new code. 0 = the link never expires and no code is needed. Codes are created under «Guest QR» in the sidebar.",
+          "source": "A list of entities, or every entity on a dashboard you build for guests.",
+          "dashboard": "When «A dashboard» is chosen. Guests see its entities with its cards' titles, order, names and icons, and can only use those. When you change the dashboard, the panel follows."
         }
       }
     },
     "error": {
-      "invalid_network": "One of the networks is not valid. Use the format 192.168.1.0/24."
+      "invalid_network": "One of the networks is not valid. Use the format 192.168.1.0/24.",
+      "no_dashboard": "Choose a dashboard.",
+      "dashboard_empty": "That dashboard has no cards with entities. The auto-generated «Overview» dashboard does not count until you edit it; better create one for guests."
     },
     "abort": {
       "single_instance_allowed": "Already configured."
@@ -46,13 +52,17 @@
           "enabled": "Enable the guest panel",
           "title": "Page title",
           "networks": "Allowed networks",
+          "source": "What guests can control",
           "entities": "Entities guests can control",
+          "dashboard": "Dashboard",
           "link_hours": "Guest link duration"
         },
         "data_description": {
           "networks": "Your Wi-Fi network in CIDR format, for example 192.168.1.0/24. You can add several.",
-          "entities": "Sensors are shown read-only.",
-          "link_hours": "Hours each link or QR code works for. Once it expires, the guest has to scan a new code. 0 = the link never expires and no code is needed. Codes are created under «Guest QR» in the sidebar."
+          "entities": "When «A list of entities» is chosen. Sensors are shown read-only.",
+          "link_hours": "Hours each link or QR code works for. Once it expires, the guest has to scan a new code. 0 = the link never expires and no code is needed. Codes are created under «Guest QR» in the sidebar.",
+          "source": "A list of entities, or every entity on a dashboard you build for guests.",
+          "dashboard": "When «A dashboard» is chosen. Guests see its entities with its cards' titles, order, names and icons, and can only use those. When you change the dashboard, the panel follows."
         }
       },
       "add_user": {
@@ -112,7 +122,7 @@
           "theme": "Any theme installed in your Home Assistant.",
           "accent": "Optional, as #rrggbb. Replaces the theme's primary colour.",
           "welcome": "Optional. Shown under the title; for example the house rules.",
-          "layout": "Optional. A list of sections with a title and entities, as in an entities card. Each entity can have its own name, icon (one, or one per state), states (the text shown for each state) and buttons (the text of each button). Leave it empty to group by area."
+          "layout": "Optional. A list of sections with a title and entities, as in an entities card. Each entity can have its own name, icon (one, or one per state), states (the text shown for each state) and buttons (the text of each button). Leave it empty to group by area. If the panel uses a dashboard, the dashboard is the layout and this field is not used."
         }
       },
       "home_state": {
@@ -149,7 +159,9 @@
       "no_states": "Enter at least one state.",
       "invalid_color": "Use a colour in #rrggbb format, for example #ff9800.",
       "invalid_layout": "The layout is not valid. It must be a list of sections, each with «entities».",
-      "layout_not_allowed": "The layout uses entities that are not on the guest panel's list: {entity}"
+      "layout_not_allowed": "The layout uses entities that are not on the guest panel's list: {entity}",
+      "no_dashboard": "Choose a dashboard.",
+      "dashboard_empty": "That dashboard has no cards with entities. The auto-generated «Overview» dashboard does not count until you edit it; better create one for guests."
     },
     "abort": {
       "no_users": "There are no users to restrict. First create a non-administrator user in Settings → People.",
@@ -174,6 +186,12 @@
         "open": "A guest opens the panel",
         "action": "A guest uses something",
         "blocked": "Someone with an expired link, or while the panel is paused, tries to get in"
+      }
+    },
+    "source": {
+      "options": {
+        "entities": "A list of entities",
+        "dashboard": "A dashboard"
       }
     }
   },

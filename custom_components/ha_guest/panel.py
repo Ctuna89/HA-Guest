@@ -36,6 +36,9 @@ from .const import (
     CONF_ENABLED,
     CONF_ENTITIES,
     CONF_SECRET,
+    CONF_DASHBOARD,
+    CONF_SOURCE,
+    SOURCE_DASHBOARD,
     CONF_NETWORKS,
     CONF_PANEL,
     CONF_TITLE,
@@ -45,6 +48,7 @@ from .const import (
     TOKEN_HEADER,
 )
 from .activity import Guest, GuestRuntime
+from .dashboard import Plan, async_dashboard_plan
 from .icons import async_icon_path
 from .invite import link_seconds, token_expiry
 
@@ -233,18 +237,40 @@ def _icon_name(hass: HomeAssistant, state: State, override: str | dict[str, str]
     )
 
 
+async def async_dashboard_or_none(hass: HomeAssistant, conf: dict[str, Any]) -> Plan | None:
+    """The chosen dashboard's content, when the panel takes it from a dashboard."""
+    if conf.get(CONF_SOURCE) != SOURCE_DASHBOARD:
+        return None
+    return await async_dashboard_plan(hass, conf.get(CONF_DASHBOARD)) or []
+
+
+async def async_allowed_entities(hass: HomeAssistant, conf: dict[str, Any]) -> list[str]:
+    """What guests may use: the panel's entity list, or every entity the chosen dashboard shows.
+
+    A dashboard that is missing or cannot be read allows nothing.
+    """
+    plan = await async_dashboard_or_none(hass, conf)
+    if plan is None:
+        return conf.get(CONF_ENTITIES, [])
+    return [item["entity"] for _, items in plan for item in items]
+
+
 async def async_build_sections(hass: HomeAssistant, conf: dict[str, Any]) -> list[dict[str, Any]]:
-    """The page content: the owner's layout if there is one, otherwise the allowed entities grouped by area."""
-    allowed = conf.get(CONF_ENTITIES, [])
+    """The page content: the chosen dashboard, the owner's layout, or the allowed entities grouped by area."""
     appearance = conf.get(CONF_APPEARANCE, {})
     show_icons = appearance.get(CONF_SHOW_ICONS, True)
 
-    plan: list[tuple[str | None, list[dict[str, Any]]]] = []
-    if layout := appearance.get(CONF_LAYOUT):
+    plan: Plan = []
+    if (dashboard := await async_dashboard_or_none(hass, conf)) is not None:
+        plan = dashboard
+        allowed = [item["entity"] for _, items in dashboard for item in items]
+    elif layout := appearance.get(CONF_LAYOUT):
+        allowed = conf.get(CONF_ENTITIES, [])
         for section in layout:
             items = [{"entity": item} if isinstance(item, str) else item for item in section.get("entities", [])]
             plan.append((section.get("title"), items))
     else:
+        allowed = conf.get(CONF_ENTITIES, [])
         by_area: dict[str | None, list[dict[str, Any]]] = {}
         for entity_id in allowed:
             by_area.setdefault(_area_name(hass, entity_id), []).append({"entity": entity_id})
@@ -376,7 +402,11 @@ class GuestActionView(_GuestView):
             return self.json({"error": "invalid"}, HTTPStatus.BAD_REQUEST)
 
         entity_id = body.get("entity_id")
-        if entity_id not in conf.get(CONF_ENTITIES, []) or (state := hass.states.get(entity_id)) is None:
+        if (
+            not isinstance(entity_id, str)
+            or entity_id not in await async_allowed_entities(hass, conf)
+            or (state := hass.states.get(entity_id)) is None
+        ):
             return self.json({"error": "not_allowed"}, HTTPStatus.FORBIDDEN)
         action, value = body.get("action"), body.get("value")
         if action == "toggle":

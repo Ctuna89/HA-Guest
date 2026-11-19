@@ -21,6 +21,7 @@ from .const import (
     CONF_CONDITION_ENTITY,
     CONF_CONDITION_STATES,
     CONF_ENABLED,
+    CONF_DASHBOARD,
     CONF_ENTITIES,
     CONF_FAMILY_LOCATION,
     CONF_HOME_ENTITIES,
@@ -37,6 +38,7 @@ from .const import (
     CONF_PANEL,
     CONF_SECRET,
     CONF_SHOW_ICONS,
+    CONF_SOURCE,
     CONF_THEME,
     CONF_TITLE,
     CONF_USER,
@@ -47,21 +49,53 @@ from .const import (
     DEFAULT_TITLE,
     DOMAIN,
     NOTIFY_EVENTS,
+    SOURCE_DASHBOARD,
+    SOURCE_ENTITIES,
 )
+from .dashboard import async_dashboard_plan, dashboard_options
 from .invite import new_secret
 
 ENTITIES = selector.EntitySelector(selector.EntitySelectorConfig(multiple=True))
 TEXT_LIST = selector.TextSelector(selector.TextSelectorConfig(multiple=True))
 
-PANEL_SCHEMA = vol.Schema({
-    vol.Required(CONF_ENABLED, default=True): selector.BooleanSelector(),
-    vol.Required(CONF_TITLE, default=DEFAULT_TITLE): selector.TextSelector(),
-    vol.Required(CONF_NETWORKS): TEXT_LIST,
-    vol.Optional(CONF_ENTITIES, default=[]): ENTITIES,
-    vol.Required(CONF_LINK_HOURS, default=0): selector.NumberSelector(
-        selector.NumberSelectorConfig(min=0, max=720, step=0.5, unit_of_measurement="h", mode=selector.NumberSelectorMode.BOX)
-    ),
-})
+def panel_schema(hass: HomeAssistant) -> vol.Schema:
+    return vol.Schema({
+        vol.Required(CONF_ENABLED, default=True): selector.BooleanSelector(),
+        vol.Required(CONF_TITLE, default=DEFAULT_TITLE): selector.TextSelector(),
+        vol.Required(CONF_NETWORKS): TEXT_LIST,
+        vol.Required(CONF_SOURCE, default=SOURCE_ENTITIES): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=[SOURCE_ENTITIES, SOURCE_DASHBOARD], translation_key=CONF_SOURCE,
+                mode=selector.SelectSelectorMode.LIST,
+            )
+        ),
+        vol.Optional(CONF_ENTITIES, default=[]): ENTITIES,
+        vol.Optional(CONF_DASHBOARD): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=dashboard_options(hass), mode=selector.SelectSelectorMode.DROPDOWN
+            )
+        ),
+        vol.Required(CONF_LINK_HOURS, default=0): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=720, step=0.5, unit_of_measurement="h", mode=selector.NumberSelectorMode.BOX)
+        ),
+    })
+
+
+async def _async_check_panel(hass: HomeAssistant, user_input: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
+    """The panel settings cleaned up, and the form errors."""
+    errors: dict[str, str] = {}
+    panel = dict(user_input)
+    if networks := _clean_networks(user_input[CONF_NETWORKS]):
+        panel[CONF_NETWORKS] = networks
+    else:
+        errors[CONF_NETWORKS] = "invalid_network"
+    if panel.get(CONF_SOURCE) == SOURCE_DASHBOARD:
+        if not panel.get(CONF_DASHBOARD):
+            errors[CONF_DASHBOARD] = "no_dashboard"
+        elif not await async_dashboard_plan(hass, panel[CONF_DASHBOARD]):
+            # Missing, auto-generated (the default «Overview» until it is edited), or with no entity cards.
+            errors[CONF_DASHBOARD] = "dashboard_empty"
+    return panel, errors
 
 USER_SCHEMA = vol.Schema({
     vol.Optional(CONF_ALWAYS_ENTITIES, default=[]): ENTITIES,
@@ -120,16 +154,15 @@ class GuestConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            if networks := _clean_networks(user_input[CONF_NETWORKS]):
-                panel = {**user_input, CONF_NETWORKS: networks}
+            panel, errors = await _async_check_panel(self.hass, user_input)
+            if not errors:
                 return self.async_create_entry(
                     title="HA Guest", data={CONF_SECRET: new_secret()}, options={CONF_PANEL: panel, CONF_USERS: {}}
                 )
-            errors[CONF_NETWORKS] = "invalid_network"
         suggested = user_input or {CONF_NETWORKS: _default_network(self.hass)}
         return self.async_show_form(
             step_id="user", errors=errors,
-            data_schema=self.add_suggested_values_to_schema(PANEL_SCHEMA, suggested),
+            data_schema=self.add_suggested_values_to_schema(panel_schema(self.hass), suggested),
         )
 
     @staticmethod
@@ -168,13 +201,13 @@ class GuestOptionsFlow(OptionsFlow):
     async def async_step_panel(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            if networks := _clean_networks(user_input[CONF_NETWORKS]):
-                return self._save(**{CONF_PANEL: {**user_input, CONF_NETWORKS: networks}})
-            errors[CONF_NETWORKS] = "invalid_network"
+            panel, errors = await _async_check_panel(self.hass, user_input)
+            if not errors:
+                return self._save(**{CONF_PANEL: panel})
         suggested = user_input or self.config_entry.options.get(CONF_PANEL, {})
         return self.async_show_form(
             step_id="panel", errors=errors,
-            data_schema=self.add_suggested_values_to_schema(PANEL_SCHEMA, suggested),
+            data_schema=self.add_suggested_values_to_schema(panel_schema(self.hass), suggested),
         )
 
     async def async_step_appearance(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
@@ -191,9 +224,12 @@ class GuestOptionsFlow(OptionsFlow):
             except vol.Invalid:
                 errors[CONF_LAYOUT] = "invalid_layout"
             else:
-                allowed = self.config_entry.options.get(CONF_PANEL, {}).get(CONF_ENTITIES, [])
+                panel = self.config_entry.options.get(CONF_PANEL, {})
+                allowed = panel.get(CONF_ENTITIES, [])
                 used = [item if isinstance(item, str) else item["entity"] for s in layout for item in s["entities"]]
-                if missing := [entity_id for entity_id in used if entity_id not in allowed]:
+                # With a dashboard as the source, the dashboard is the layout and this one is not used.
+                missing = [] if panel.get(CONF_SOURCE) == SOURCE_DASHBOARD else [e for e in used if e not in allowed]
+                if missing:
                     errors[CONF_LAYOUT] = "layout_not_allowed"
                     placeholders["entity"] = ", ".join(missing)
             if not errors:

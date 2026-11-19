@@ -539,3 +539,104 @@ async def test_layout_texts_and_state_icons(hass, hass_client_no_auth):
     hass.states.async_set(lock, "locked", {"friendly_name": "PuertaPeten"})
     door = (await cards())[lock]
     assert door["state_text"] == "Closed" and door["icon"] not in (open_icon, locked)
+
+
+
+GUEST_DASHBOARD = {"views": [{"title": "Home", "type": "sections", "sections": [
+    {"cards": [
+        {"type": "heading", "heading": "Entrance"},
+        {"type": "tile", "entity": LIVING, "name": "Sofa lights", "icon": "mdi:sofa"},
+        {"type": "custom:mushroom-light-card", "entity": ALWAYS},
+        {"type": "markdown", "content": "Welcome"},
+    ]},
+    {"cards": [
+        {"type": "entities", "title": "Bedroom", "entities": [BEDROOM, {"type": "divider"}, {"entity": LIVING}]},
+    ]},
+]}]}
+
+
+async def _save_dashboard(client, msg_id, config):
+    await client.send_json({"id": msg_id, "type": "lovelace/config/save", "url_path": "guest-view", "config": config})
+    assert (await client.receive_json())["success"]
+
+
+async def test_dashboard_as_source(hass, hass_client_no_auth, hass_ws_client):
+    assert await async_setup_component(hass, "lovelace", {})
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": "lovelace/dashboards/create", "url_path": "guest-view", "title": "Guests"})
+    assert (await ws.receive_json())["success"]
+    await _save_dashboard(ws, 2, GUEST_DASHBOARD)
+
+    await _setup(hass, panel={"source": "dashboard", "dashboard": "guest-view", "entities": []})
+    client = await hass_client_no_auth()
+    data = await (await client.get("/api/ha_guest/states")).json()
+    assert [(s["title"], [(e["entity_id"], e["name"]) for e in s["entities"]]) for s in data["sections"]] == [
+        ("Entrance", [(LIVING, "Sofa lights"), (ALWAYS, "always")]),
+        ("Bedroom", [(BEDROOM, "bedroom")]),
+    ]
+
+    body = {"entity_id": BEDROOM, "action": "turn_on"}
+    assert (await client.post("/api/ha_guest/action", json=body)).status == 200
+
+    # Taking a card off the dashboard takes the entity away from guests.
+    trimmed = {"views": [{"cards": [{"type": "tile", "entity": LIVING}]}]}
+    await _save_dashboard(ws, 3, trimmed)
+    assert (await client.post("/api/ha_guest/action", json={**body, "action": "turn_off"})).status == 403
+    data = await (await client.get("/api/ha_guest/states")).json()
+    assert [e["entity_id"] for s in data["sections"] for e in s["entities"]] == [LIVING]
+
+    # A dashboard that disappears allows nothing.
+    await ws.send_json({"id": 4, "type": "lovelace/dashboards/list"})
+    dashboard_id = (await ws.receive_json())["result"][0]["id"]
+    await ws.send_json({"id": 5, "type": "lovelace/dashboards/delete", "dashboard_id": dashboard_id})
+    assert (await ws.receive_json())["success"]
+    assert (await client.post("/api/ha_guest/action", json={"entity_id": LIVING, "action": "turn_on"})).status == 403
+
+
+async def test_dashboard_choice_in_options(hass, hass_ws_client):
+    assert await async_setup_component(hass, "lovelace", {})
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": "lovelace/dashboards/create", "url_path": "guest-view", "title": "Guests"})
+    assert (await ws.receive_json())["success"]
+    entry = await _setup(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "panel"})
+    dashboards = next(k for k in result["data_schema"].schema if k == "dashboard")
+    options = result["data_schema"].schema[dashboards].config["options"]
+    assert [o["value"] for o in options] == ["lovelace", "guest-view"]
+
+    form = {**entry.options["panel"], "source": "dashboard"}
+    result = await hass.config_entries.options.async_configure(result["flow_id"], form)
+    assert result["errors"] == {"dashboard": "no_dashboard"}
+    # The auto-generated default dashboard and a dashboard with no entity cards are refused.
+    for dashboard in ("lovelace", "guest-view"):
+        result = await hass.config_entries.options.async_configure(result["flow_id"], {**form, "dashboard": dashboard})
+        assert result["errors"] == {"dashboard": "dashboard_empty"}
+    await _save_dashboard(ws, 2, GUEST_DASHBOARD)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {**form, "dashboard": "guest-view"})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options["panel"]["dashboard"] == "guest-view"
+
+
+def test_plan_from_config():
+    from custom_components.ha_guest.dashboard import plan_from_config
+
+    config = {"views": [
+        {"title": "Downstairs", "cards": [
+            {"type": "vertical-stack", "title": "Kitchen", "cards": [
+                {"type": "button", "entity": "light.kitchen", "icon": "/local/x.png"},
+                {"type": "conditional", "card": {"type": "light", "entity": "light.island", "name": "Island"}},
+            ]},
+            {"type": "glance", "entities": ["sensor.temp", "not an entity"]},
+            {"type": "picture-elements", "elements": [{"type": "state-icon", "entity": "lock.door"}]},
+            {"type": "area", "area": "garage"},
+        ]},
+        {"title": "Upstairs", "cards": [{"type": "entity", "entity": "light.kitchen"}, {"type": "tile", "entity": "fan.attic"}]},
+    ]}
+    assert plan_from_config(config) == [
+        ("Kitchen", [{"entity": "light.kitchen"}, {"entity": "light.island", "name": "Island"}]),
+        ("Downstairs", [{"entity": "sensor.temp"}, {"entity": "lock.door"}]),
+        ("Upstairs", [{"entity": "fan.attic"}]),
+    ]
+    assert plan_from_config({"strategy": {"type": "original-states"}}) == []

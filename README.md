@@ -36,6 +36,25 @@ Guests open `http://<home-assistant-ip>:8123/guest`. The easiest way is to leave
 From any other network the page only shows «Connect to the home Wi-Fi» along with the IP address Home Assistant
 sees, which helps when adjusting the allowed networks.
 
+### Using a dashboard
+
+Instead of a list of entities, **What guests can control** can be **A dashboard**: build a normal Home Assistant
+dashboard for guests (*Settings → Dashboards → Add dashboard*) and pick it. Guests then:
+
+- see every entity the dashboard's cards show, under its view titles, heading cards and card titles, in the same
+  order, with the names and icons set on the cards;
+- can use only those entities. Remove a card from the dashboard and guests lose that entity at once; add one and
+  they get it.
+
+The guest page still draws its own cards: it reads the dashboard, it does not display it, so guests need no
+account. Any card that names an `entity` or `entities` is understood (tile, button, entities, glance, light,
+thermostat, stacks, grids, conditional cards, picture elements, and custom cards that use those keys). Cards that
+pick entities another way, such as an area card, add nothing. The auto-generated «Overview» dashboard cannot be
+used until it is edited. With a dashboard as the source, the YAML layout under *Guest panel appearance* is not
+used. In Home Assistant only administrators can edit dashboards, so only they can change what guests control.
+
+<img src="docs/guest-dashboard.png" alt="Guest panel built from a dashboard" width="320">
+
 ### Customising the look
 
 The page follows how your Home Assistant is already set up, and the rest is under **Configure → Guest panel
