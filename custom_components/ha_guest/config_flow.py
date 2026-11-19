@@ -73,12 +73,23 @@ USER_SCHEMA = vol.Schema({
 
 HOME_STATE_SCHEMA = vol.Schema({vol.Required(CONF_CONDITION_STATES): TEXT_LIST})
 
+BUTTONS = ["open", "close", "stop", "lock", "unlock", "activate", "play_pause", "start", "dock"]
+
 # What the owner writes under «Layout», in the style of a dashboard's entities card.
 LAYOUT_SCHEMA = vol.Schema([{
     vol.Optional("title"): cv.string,
     vol.Required("entities"): [vol.Any(
         cv.entity_id,
-        {vol.Required("entity"): cv.entity_id, vol.Optional("name"): cv.string, vol.Optional("icon"): cv.icon},
+        {
+            vol.Required("entity"): cv.entity_id,
+            vol.Optional("name"): cv.string,
+            # One icon, or one per state.
+            vol.Optional("icon"): vol.Any({cv.string: cv.icon}, cv.icon),
+            # The text shown for each state, e.g. {unlocked: Open}.
+            vol.Optional("states"): {cv.string: cv.string},
+            # The text of each button, e.g. {unlock: Open the door}.
+            vol.Optional("buttons"): {vol.In(BUTTONS): cv.string},
+        },
     )],
 }])
 HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")

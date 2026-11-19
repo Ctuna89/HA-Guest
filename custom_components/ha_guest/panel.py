@@ -68,6 +68,17 @@ DEVICE_CLASS_ICONS = {
     "outlet": "mdi:power-socket", "tv": "mdi:television", "speaker": "mdi:speaker",
 }
 DEFAULT_ICON = "mdi:eye"
+# Icons that change with the state, as Home Assistant shows them: (domain or device class, state) -> icon
+STATE_ICONS = {
+    ("lock", "unlocked"): "mdi:lock-open-variant", ("lock", "open"): "mdi:lock-open-variant",
+    ("lock", "jammed"): "mdi:lock-alert", ("light", "off"): "mdi:lightbulb-outline",
+    ("cover", "open"): "mdi:window-shutter-open", ("door", "on"): "mdi:door-open", ("window", "on"): "mdi:window-open",
+    ("garage", "open"): "mdi:garage-open", ("garage", "on"): "mdi:garage-open",
+    ("curtain", "open"): "mdi:curtains", ("curtain", "closed"): "mdi:curtains-closed",
+    ("blind", "open"): "mdi:blinds-horizontal", ("blind", "closed"): "mdi:blinds-horizontal-closed",
+    ("outlet", "off"): "mdi:power-plug-off", ("switch", "off"): "mdi:toggle-switch-variant-off",
+    ("input_boolean", "off"): "mdi:toggle-switch-variant-off", ("fan", "off"): "mdi:fan-off",
+}
 
 # Home Assistant theme variable -> the guest page's own variable
 THEME_VARIABLES = {
@@ -201,15 +212,23 @@ def theme_variables(hass: HomeAssistant, name: str | None) -> dict[str, dict[str
     return result
 
 
-def _icon_name(hass: HomeAssistant, state: State, override: str | None) -> str:
-    """Same precedence as Home Assistant: the icon chosen by the owner wins over the integration's."""
+def _icon_name(hass: HomeAssistant, state: State, override: str | dict[str, str] | None) -> str:
+    """Same precedence as Home Assistant: the icon chosen by the owner wins over the integration's.
+
+    The layout's icon can be one icon, or one per state ({locked: mdi:door-closed-lock, unlocked: mdi:door-open}).
+    """
+    if isinstance(override, dict):
+        override = override.get(state.state)
     entry = er.async_get(hass).async_get(state.entity_id)
+    device_class = state.attributes.get("device_class")
     return (
         override
         or (entry and entry.icon)
         or state.attributes.get("icon")
         or (entry and entry.original_icon)
-        or DEVICE_CLASS_ICONS.get(state.attributes.get("device_class"))
+        or STATE_ICONS.get((device_class, state.state))
+        or DEVICE_CLASS_ICONS.get(device_class)
+        or STATE_ICONS.get((state.domain, state.state))
         or DOMAIN_ICONS.get(state.domain, DEFAULT_ICON)
     )
 
@@ -247,6 +266,9 @@ async def async_build_sections(hass: HomeAssistant, conf: dict[str, Any]) -> lis
                 "entity_id": entity_id,
                 "name": item.get("name") or state.name,
                 "state": state.state,
+                # The owner's own words for this card's state and buttons, when the layout gives them.
+                "state_text": (item.get("states") or {}).get(state.state),
+                "labels": item.get("buttons") or {},
                 "icon": icon,
                 "attributes": {k: state.attributes[k] for k in ATTRIBUTES if k in state.attributes},
             })

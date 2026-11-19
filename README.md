@@ -64,6 +64,31 @@ appearance**:
         icon: mdi:movie-open
   ```
 
+  Each entity can also say what its state and its buttons read, and use a different icon per state:
+
+  ```yaml
+  - title: Entrance
+    entities:
+      - entity: lock.front_door
+        name: Front door
+        icon:
+          locked: mdi:door-closed-lock
+          unlocked: mdi:door-open
+        states:
+          locked: Locked
+          unlocked: Open
+        buttons:
+          unlock: Open the door
+          lock: Lock
+  ```
+
+  `buttons` accepts `open`, `close`, `stop`, `lock`, `unlock`, `activate`, `play_pause`, `start` and `dock`.
+  `states` uses the entity's raw states as Home Assistant reports them (`on`, `off`, `locked`, `open`…). Without
+  an icon of your own, icons already follow the state the way Home Assistant shows them (an open padlock when
+  unlocked, an outline bulb when off).
+
+  <img src="docs/guest-texts.png" alt="A lock with custom texts and per-state icons" width="320">
+
   The layout only arranges cards. Guests can still only use entities on the panel's entity list, and the form
   tells you if the layout names one that is not on it.
 

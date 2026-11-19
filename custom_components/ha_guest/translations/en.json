@@ -112,7 +112,7 @@
           "theme": "Any theme installed in your Home Assistant.",
           "accent": "Optional, as #rrggbb. Replaces the theme's primary colour.",
           "welcome": "Optional. Shown under the title; for example the house rules.",
-          "layout": "Optional. A list of sections with a title and entities, as in an entities card; each entity can have its own name and icon. Leave it empty to group by area."
+          "layout": "Optional. A list of sections with a title and entities, as in an entities card. Each entity can have its own name, icon (one, or one per state), states (the text shown for each state) and buttons (the text of each button). Leave it empty to group by area."
         }
       },
       "home_state": {

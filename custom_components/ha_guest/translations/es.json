@@ -112,7 +112,7 @@
           "theme": "Cualquier tema instalado en tu Home Assistant.",
           "accent": "Opcional, en formato #rrggbb. Reemplaza el color principal del tema.",
           "welcome": "Opcional. Se muestra bajo el título; por ejemplo las reglas de la casa.",
-          "layout": "Opcional. Lista de secciones con título y entidades, como en una tarjeta de entidades; cada entidad puede llevar name e icon propios. Si lo dejas vacío, se agrupan por área."
+          "layout": "Opcional. Lista de secciones con título y entidades, como en una tarjeta de entidades. Cada entidad puede llevar name, icon (uno, o uno por estado), states (el texto de cada estado) y buttons (el texto de cada botón). Si lo dejas vacío, se agrupan por área."
         }
       },
       "home_state": {

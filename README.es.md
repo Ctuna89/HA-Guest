@@ -65,6 +65,31 @@ panel de invitados**:
         icon: mdi:movie-open
   ```
 
+  Cada entidad también puede definir el texto de su estado y de sus botones, y usar un icono distinto por estado:
+
+  ```yaml
+  - title: Recibidor
+    entities:
+      - entity: lock.puerta_peaton
+        name: Puerta peatonal
+        icon:
+          locked: mdi:door-closed-lock
+          unlocked: mdi:door-open
+        states:
+          locked: Cerrada con llave
+          unlocked: Abierta
+        buttons:
+          unlock: Abrir puerta
+          lock: Cerrar con llave
+  ```
+
+  `buttons` acepta `open`, `close`, `stop`, `lock`, `unlock`, `activate`, `play_pause`, `start` y `dock`.
+  `states` usa los estados internos de la entidad tal como los informa Home Assistant (`on`, `off`, `locked`,
+  `open`…). Sin un icono propio, los iconos ya cambian con el estado como en Home Assistant (candado abierto al
+  desbloquear, ampolleta vacía al apagar).
+
+  <img src="docs/guest-texts.png" alt="Una cerradura con textos propios e iconos por estado" width="320">
+
   El diseño solo ordena las tarjetas. Los invitados siguen pudiendo usar únicamente las entidades de la lista
   del panel, y el formulario te avisa si el diseño nombra una que no está en ella.
 

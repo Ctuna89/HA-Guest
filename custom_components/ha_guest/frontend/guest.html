@@ -37,6 +37,7 @@
     flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--btn); color: var(--muted);
     display: grid; place-items: center;
   }
+  .icon[hidden] { display: none; }
   .icon svg { width: 22px; height: 22px; fill: currentColor; }
   .card.on .icon { background: var(--accent); color: var(--accent-text); }
   .label { flex: 1; min-width: 0; }
@@ -225,19 +226,20 @@
     return b;
   }
 
-  function iconNode(path) {
+  // The icon can change with the state (an open padlock when unlocked), so its shape is updated in place.
+  function iconNode() {
     const wrap = el("span", "icon");
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("viewBox", "0 0 24 24");
     svg.setAttribute("aria-hidden", "true");
     const shape = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    shape.setAttribute("d", path);
     svg.append(shape);
     wrap.append(svg);
-    return wrap;
+    return { wrap, set: path => { wrap.hidden = !path; if (path) shape.setAttribute("d", path); } };
   }
 
   function stateText(e) {
+    if (e.state_text) return e.state_text;
     const unit = e.attributes.unit_of_measurement;
     if (unit) return `${e.state} ${unit}`;
     return STATE_LABEL[e.state] || e.state;
@@ -253,9 +255,12 @@
     const name = el("div", "name");
     const state = el("div", "state");
     label.append(name, state);
-    if (e.icon) head.append(iconNode(e.icon));
+    const icon = iconNode();
+    head.append(icon.wrap);
     head.append(label);
     card.append(head);
+    // The owner's own button texts from the layout, or the page's defaults.
+    const L = action => (e.labels && e.labels[action]) || T[action];
     const row = () => { const r = el("div", "row"); card.append(r); return r; };
     const updaters = [];
 
@@ -294,10 +299,10 @@
       }
     } else if (domain === "cover" || domain === "valve") {
       const r = row();
-      const open = button(T.open, () => act(card, id, "open"));
-      const close = button(T.close, () => act(card, id, "close"));
+      const open = button(L("open"), () => act(card, id, "open"));
+      const close = button(L("close"), () => act(card, id, "close"));
       r.append(open);
-      if (domain === "cover") r.append(button(T.stop, () => act(card, id, "stop")));
+      if (domain === "cover") r.append(button(L("stop"), () => act(card, id, "stop")));
       r.append(close);
       updaters.push(x => {
         const position = x.attributes.current_position;
@@ -305,12 +310,12 @@
         close.disabled = x.state === "closed";
       });
     } else if (["scene", "script", "button", "input_button"].includes(domain)) {
-      row().append(button(T.activate, () => act(card, id, "activate"), "run"));
+      row().append(button(L("activate"), () => act(card, id, "activate"), "run"));
       updaters.push(() => { state.textContent = ""; });
     } else if (domain === "lock") {
       const r = row();
-      const unlock = button(T.unlock, () => act(card, id, "unlock"));
-      const lock = button(T.lock, () => act(card, id, "lock"));
+      const unlock = button(L("unlock"), () => act(card, id, "unlock"));
+      const lock = button(L("lock"), () => act(card, id, "lock"));
       r.append(unlock, lock);
       updaters.push(x => {
         unlock.disabled = x.state === "unlocked";
@@ -329,24 +334,25 @@
         target = x.attributes.temperature ?? null;
         value.textContent = target == null ? "–" : `${target}°`;
         const current = x.attributes.current_temperature;
-        state.textContent = (STATE_LABEL[x.state] || x.state) + (current != null ? ` · ${current}°` : "");
+        state.textContent = (x.state_text || STATE_LABEL[x.state] || x.state) + (current != null ? ` · ${current}°` : "");
       });
     } else if (domain === "media_player") {
       const r = row();
       r.append(button("−", () => act(card, id, "volume_down"), "", T.vol_down),
-        button(T.play_pause, () => act(card, id, "play_pause")),
+        button(L("play_pause"), () => act(card, id, "play_pause")),
         button("+", () => act(card, id, "volume_up"), "", T.vol_up));
       updaters.push(x => {
         if (x.attributes.media_title) state.textContent = x.attributes.media_title;
       });
     } else if (domain === "vacuum") {
       const r = row();
-      r.append(button(T.start, () => act(card, id, "start")), button(T.dock, () => act(card, id, "dock")));
+      r.append(button(L("start"), () => act(card, id, "start")), button(L("dock"), () => act(card, id, "dock")));
     }
 
     const update = x => {
       name.textContent = x.name;
       state.textContent = stateText(x);
+      icon.set(x.icon);
       card.classList.toggle("on", ["on", "open", "playing", "unlocked", "heat", "cool", "cleaning"].includes(x.state));
       updaters.forEach(fn => fn(x));
     };
@@ -386,7 +392,7 @@
     if (!data.sections.length) return notice(data.title, T.empty);
 
     const all = data.sections.flatMap(s => s.entities);
-    const next = data.sections.map(s => `${s.title || ""}:${s.entities.map(e => e.entity_id + (e.icon || "")).join(",")}`).join("|");
+    const next = data.sections.map(s => `${s.title || ""}:${s.entities.map(e => e.entity_id + JSON.stringify(e.labels || {})).join(",")}`).join("|");
     if (next !== signature) {
       signature = next;
       cards = new Map();

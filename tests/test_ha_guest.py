@@ -495,3 +495,47 @@ async def test_safety_options_flow(hass):
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert entry.options["safety"]["condition_states"] == ["disarmed"]
     assert entry.options["panel"]["entities"] == [LIVING]
+
+
+
+async def test_layout_texts_and_state_icons(hass, hass_client_no_auth):
+    """The owner's words for states and buttons, per-state icons, and icons that follow the state by default."""
+    lock = "lock.front_door"
+    hass.states.async_set(lock, "locked", {"friendly_name": "PuertaPeten"})
+    hass.states.async_set("light.porch", "off", {"friendly_name": "PuertaExterior Light"})
+    entry = await _setup(hass, panel={"entities": [lock, "light.porch"]})
+    client = await hass_client_no_auth()
+
+    async def cards():
+        data = await (await client.get("/api/ha_guest/states")).json()
+        return {e["entity_id"]: e for s in data["sections"] for e in s["entities"]}
+
+    # Without a layout the padlock opens with the lock, and a light that is off gets an outline bulb.
+    locked = (await cards())[lock]["icon"]
+    hass.states.async_set(lock, "unlocked", {"friendly_name": "PuertaPeten"})
+    by_id = await cards()
+    assert by_id[lock]["icon"] != locked
+    assert by_id[lock]["state_text"] is None and by_id[lock]["labels"] == {}
+
+    layout = [{"title": "Entrance", "entities": [
+        {"entity": lock, "name": "Front door", "icon": {"locked": "mdi:door-closed-lock", "unlocked": "mdi:door-open"},
+         "states": {"locked": "Closed", "unlocked": "Open"}, "buttons": {"unlock": "Open the door", "lock": "Close"}},
+        {"entity": "light.porch", "name": "Porch light", "icon": "mdi:outdoor-lamp"},
+    ]}]
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "appearance"})
+    form = {"theme": "default", "mode": "auto", "show_icons": True}
+    bad = [{"entities": [{"entity": lock, "buttons": {"explode": "Boom"}}]}]
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {**form, "layout": bad})
+    assert result["errors"] == {"layout": "invalid_layout"}
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {**form, "layout": layout})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+    door = (await cards())[lock]
+    assert (door["name"], door["state_text"]) == ("Front door", "Open")
+    assert door["labels"] == {"unlock": "Open the door", "lock": "Close"}
+    open_icon = door["icon"]
+    hass.states.async_set(lock, "locked", {"friendly_name": "PuertaPeten"})
+    door = (await cards())[lock]
+    assert door["state_text"] == "Closed" and door["icon"] not in (open_icon, locked)
