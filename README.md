@@ -213,9 +213,19 @@ server, so it applies equally to the app, the browser and the API.
 ## Development
 
 ```bash
-pip install pytest-homeassistant-custom-component
+pip install pytest-homeassistant-custom-component segno==1.6.6
+```
+
+```bash
+python -c "import json, pathlib, homeassistant.components.frontend as f; print(*json.loads((pathlib.Path(f.__file__).parent / 'manifest.json').read_text())['requirements'])" | xargs pip install
 ```
 
 ```bash
 pytest tests
 ```
+
+### Releasing
+
+Releases are published by `.github/workflows/release.yml` when `main` changes: raise `version` in
+`custom_components/ha_guest/manifest.json`, add its section to `CHANGELOG.md`, and merge into `main`. The workflow
+creates the `v<version>` release with that section as notes, and does nothing if the version was already released.
