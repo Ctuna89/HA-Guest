@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from aiohttp import web
+from yarl import URL
 
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import Context, HomeAssistant, State
@@ -187,6 +188,38 @@ def network_allowed(hass: HomeAssistant, request: web.Request, conf: dict[str, A
     return False
 
 
+LOCAL_NAMES = {"localhost", "homeassistant", "homeassistant.local"}
+
+
+def host_allowed(hass: HomeAssistant, request: web.Request) -> bool:
+    """The page was reached through Home Assistant's own address, not through some other website's name.
+
+    Without this, a website opened by any device on the home network could point its own domain name at Home
+    Assistant (DNS rebinding) and use the panel from that device's browser. Accepted: IP addresses, the usual local
+    names, any «.local» name, and the hosts of Home Assistant's internal and external URLs (the QR code uses the
+    internal one).
+    """
+    host = (request.host or "").strip().lower()
+    if host.startswith("["):  # [IPv6]:port
+        host = host[1:].partition("]")[0]
+    elif host.count(":") == 1:
+        host = host.partition(":")[0]
+    if not host:
+        return False
+    try:
+        ip_address(host)
+    except ValueError:
+        pass
+    else:
+        return True
+    if host in LOCAL_NAMES or host.endswith(".local"):
+        return True
+    configured = {
+        (URL(url).host or "").lower() for url in (hass.config.internal_url, hass.config.external_url) if url
+    }
+    return host in configured
+
+
 def _area_name(hass: HomeAssistant, entity_id: str) -> str | None:
     entry = er.async_get(hass).async_get(entity_id)
     if entry is None:
@@ -315,6 +348,8 @@ class _GuestView(HomeAssistantView):
         if found is None:
             return self.json({"error": "disabled"}, HTTPStatus.NOT_FOUND)
         runtime, conf = found
+        if not host_allowed(hass, request):
+            return self.json({"error": "host"}, HTTPStatus.FORBIDDEN)
         if not network_allowed(hass, request, conf):
             # The caller's own address helps the owner work out which network to allow.
             return self.json({"error": "network", "ip": request.remote}, HTTPStatus.FORBIDDEN)

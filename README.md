@@ -174,6 +174,28 @@ The integration adds two entities on a «Guest panel» device:
 
 The entity ids above are for an English Home Assistant; they follow its language when the integration is added.
 
+### Security
+
+What the guest panel checks on every request, and what that means:
+
+- **Network:** only addresses in the allowed networks get in. Home Assistant Cloud is always refused, and forged
+  `X-Forwarded-For` or `Forwarded` headers are ignored unless they come from a proxy you listed in `trusted_proxies`.
+  Never add your reverse proxy's or Docker's internal network to the allowed networks.
+- **Link:** with a link duration above 0 (12 hours by default), a link only works until it expires. An old QR code,
+  a link with its date changed, or a made-up one is refused; the signature is 128 bits. **With 0, no link is needed
+  at all: anyone on the allowed networks gets in, even with an old QR code.**
+- **Address:** the panel only answers when opened through an IP address, a `.local` name, or Home Assistant's
+  internal or external URL, so a website opened on the home network cannot use it through its own domain name
+  (DNS rebinding). If you open it through another name, set that name as the internal URL.
+- **Actions:** only entities on the panel's list (or dashboard), and only the actions their card offers.
+
+What it cannot prevent: a link that is still valid works for anyone it is forwarded to who is on your network,
+until it expires. Keep the duration short, revoke all links when needed, and consider «Only while someone from the
+household is home».
+
+For restricted users, a Wi-Fi name (SSID) is easy to imitate: anyone can name a hotspot like your network. Prefer
+the phone's BSSID sensor (your router's address) or, better, a `device_tracker` from your router.
+
 ## Restricted users (with the app)
 
 1. Create the person in *Settings → People* with a user that is **not an administrator**, and install the app

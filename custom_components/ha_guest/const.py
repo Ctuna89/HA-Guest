@@ -11,6 +11,7 @@ CONF_TITLE = "title"
 CONF_NETWORKS = "networks"
 CONF_ENTITIES = "entities"
 CONF_LINK_HOURS = "link_hours"
+DEFAULT_LINK_HOURS = 12
 CONF_SOURCE = "source"
 CONF_DASHBOARD = "dashboard"
 SOURCE_ENTITIES = "entities"

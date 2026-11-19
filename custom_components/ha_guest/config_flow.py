@@ -44,6 +44,7 @@ from .const import (
     CONF_USER,
     CONF_USERS,
     CONF_WELCOME,
+    DEFAULT_LINK_HOURS,
     DEFAULT_NOTIFY_ON,
     DEFAULT_THEME,
     DEFAULT_TITLE,
@@ -75,7 +76,7 @@ def panel_schema(hass: HomeAssistant) -> vol.Schema:
                 options=dashboard_options(hass), mode=selector.SelectSelectorMode.DROPDOWN
             )
         ),
-        vol.Required(CONF_LINK_HOURS, default=0): selector.NumberSelector(
+        vol.Required(CONF_LINK_HOURS, default=DEFAULT_LINK_HOURS): selector.NumberSelector(
             selector.NumberSelectorConfig(min=0, max=720, step=0.5, unit_of_measurement="h", mode=selector.NumberSelectorMode.BOX)
         ),
     })
