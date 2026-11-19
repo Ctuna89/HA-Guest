@@ -16,7 +16,7 @@
         "data_description": {
           "networks": "La red de tu WiFi en formato CIDR, por ejemplo 192.168.1.0/24. Puedes agregar varias.",
           "entities": "Si eliges «Una lista de entidades». Los sensores se muestran como solo lectura.",
-          "link_hours": "Horas que sirve cada enlace o código QR. Al vencer, el invitado debe escanear un código nuevo. 0 = el enlace no vence y no hace falta código. Los códigos se crean en «Guest QR», en la barra lateral.",
+          "link_hours": "Horas que sirve cada enlace o código QR. Al vencer, el invitado debe escanear un código nuevo. Los códigos se crean en «Guest QR», en la barra lateral. Con 0 no se pide enlace: cualquiera conectado a las redes permitidas entra, incluso con un QR viejo.",
           "source": "Una lista de entidades, o todas las entidades de un dashboard que armes para los invitados.",
           "dashboard": "Si eliges «Un dashboard». Los invitados ven sus entidades con los títulos, el orden, los nombres y los iconos de sus tarjetas, y solo pueden usar esas. Cuando cambias el dashboard, el panel cambia solo."
         }
@@ -60,7 +60,7 @@
         "data_description": {
           "networks": "La red de tu WiFi en formato CIDR, por ejemplo 192.168.1.0/24. Puedes agregar varias.",
           "entities": "Si eliges «Una lista de entidades». Los sensores se muestran como solo lectura.",
-          "link_hours": "Horas que sirve cada enlace o código QR. Al vencer, el invitado debe escanear un código nuevo. 0 = el enlace no vence y no hace falta código. Los códigos se crean en «Guest QR», en la barra lateral.",
+          "link_hours": "Horas que sirve cada enlace o código QR. Al vencer, el invitado debe escanear un código nuevo. Los códigos se crean en «Guest QR», en la barra lateral. Con 0 no se pide enlace: cualquiera conectado a las redes permitidas entra, incluso con un QR viejo.",
           "source": "Una lista de entidades, o todas las entidades de un dashboard que armes para los invitados.",
           "dashboard": "Si eliges «Un dashboard». Los invitados ven sus entidades con los títulos, el orden, los nombres y los iconos de sus tarjetas, y solo pueden usar esas. Cuando cambias el dashboard, el panel cambia solo."
         }

@@ -178,6 +178,29 @@ La integración agrega dos entidades en un dispositivo «Panel de invitados»:
 
 Los nombres de estas entidades dependen del idioma de tu Home Assistant al instalar la integración.
 
+### Seguridad
+
+Lo que revisa el panel de invitados en cada solicitud, y lo que significa:
+
+- **Red:** solo entran direcciones de las redes permitidas. Home Assistant Cloud siempre se rechaza, y las cabeceras
+  `X-Forwarded-For` o `Forwarded` falsas se ignoran salvo que vengan de un proxy que pusiste en `trusted_proxies`.
+  Nunca agregues a las redes permitidas la red interna de tu proxy inverso o de Docker.
+- **Enlace:** con una duración mayor que 0 (12 horas por defecto), un enlace sirve solo hasta que vence. Un QR
+  viejo, un enlace con la fecha cambiada o uno inventado se rechazan; la firma es de 128 bits. **Con 0 no se pide
+  enlace: cualquiera conectado a las redes permitidas entra, incluso con un QR viejo.**
+- **Dirección:** el panel solo responde si se abre con una dirección IP, un nombre `.local`, o la URL interna o
+  externa de Home Assistant, así que una página web abierta en tu red no puede usarlo a través de su propio
+  dominio (DNS rebinding). Si lo abres con otro nombre, ponlo como URL interna.
+- **Acciones:** solo las entidades de la lista del panel (o del dashboard), y solo las acciones que ofrece su tarjeta.
+
+Lo que no puede impedir: un enlace todavía vigente sirve para cualquiera a quien se lo reenvíen y esté en tu red,
+hasta que venza. Usa una duración corta, anula todos los enlaces cuando haga falta y considera «Solo si hay alguien
+de la casa».
+
+Para los usuarios restringidos, el nombre del WiFi (SSID) es fácil de imitar: cualquiera puede ponerle ese nombre a
+un hotspot. Es mejor el sensor BSSID del teléfono (la dirección de tu router) o, mejor aún, un `device_tracker` de tu
+router.
+
 ## Usuarios restringidos (con la app)
 
 1. Crea a la persona en *Ajustes → Personas* con un usuario **que no sea administrador** e instálale la app.

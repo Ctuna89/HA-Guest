@@ -16,7 +16,7 @@
         "data_description": {
           "networks": "Your Wi-Fi network in CIDR format, for example 192.168.1.0/24. You can add several.",
           "entities": "When «A list of entities» is chosen. Sensors are shown read-only.",
-          "link_hours": "Hours each link or QR code works for. Once it expires, the guest has to scan a new code. 0 = the link never expires and no code is needed. Codes are created under «Guest QR» in the sidebar.",
+          "link_hours": "Hours each link or QR code works for. Once it expires, the guest has to scan a new code. Codes are created under «Guest QR» in the sidebar. With 0 no link is required: anyone on the allowed networks gets in, even with an old QR code.",
           "source": "A list of entities, or every entity on a dashboard you build for guests.",
           "dashboard": "When «A dashboard» is chosen. Guests see its entities with its cards' titles, order, names and icons, and can only use those. When you change the dashboard, the panel follows."
         }
@@ -60,7 +60,7 @@
         "data_description": {
           "networks": "Your Wi-Fi network in CIDR format, for example 192.168.1.0/24. You can add several.",
           "entities": "When «A list of entities» is chosen. Sensors are shown read-only.",
-          "link_hours": "Hours each link or QR code works for. Once it expires, the guest has to scan a new code. 0 = the link never expires and no code is needed. Codes are created under «Guest QR» in the sidebar.",
+          "link_hours": "Hours each link or QR code works for. Once it expires, the guest has to scan a new code. Codes are created under «Guest QR» in the sidebar. With 0 no link is required: anyone on the allowed networks gets in, even with an old QR code.",
           "source": "A list of entities, or every entity on a dashboard you build for guests.",
           "dashboard": "When «A dashboard» is chosen. Guests see its entities with its cards' titles, order, names and icons, and can only use those. When you change the dashboard, the panel follows."
         }

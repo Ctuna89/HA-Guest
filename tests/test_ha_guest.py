@@ -183,10 +183,11 @@ async def test_config_and_options_flow(hass):
     assert result["type"] is FlowResultType.CREATE_ENTRY
     entry = result["result"]
     assert entry.options["panel"]["networks"] == ["192.168.1.0/24"]
+    assert entry.options["panel"]["link_hours"] == 12  # new installs require expiring links
     await hass.async_block_till_done()
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert result["menu_options"] == ["panel", "appearance", "safety", "add_user"]
+    assert result["menu_options"] == ["panel", "appearance", "safety", "add_user", "revoke_links"]
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "add_user"})
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"user": user.id})
     assert result["step_id"] == "user_settings"
@@ -204,7 +205,9 @@ async def test_config_and_options_flow(hass):
     assert [g.id for g in user.groups] == [group_id(user.id)]
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert result["menu_options"] == ["panel", "appearance", "safety", "add_user", "edit_user", "remove_user"]
+    assert result["menu_options"] == [
+        "panel", "appearance", "safety", "add_user", "edit_user", "remove_user", "revoke_links",
+    ]
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "remove_user"})
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"user": [user.id]})
     await hass.async_block_till_done()
@@ -640,3 +643,26 @@ def test_plan_from_config():
         ("Upstairs", [{"entity": "fan.attic"}]),
     ]
     assert plan_from_config({"strategy": {"type": "original-states"}}) == []
+
+
+
+@pytest.mark.parametrize(
+    ("host", "status"),
+    [
+        ("127.0.0.1:8123", 200), ("[::1]:8123", 200), ("homeassistant.local:8123", 200), ("localhost", 200),
+        ("ha.home.example:8123", 200),  # the configured internal URL
+        ("evil.example", 403), ("evil.example:8123", 403), ("127.0.0.1.evil.example", 403), ("", 403),
+    ],
+)
+async def test_panel_only_answers_its_own_address(hass, hass_client_no_auth, host, status):
+    """DNS rebinding: another website pointing its own name at Home Assistant gets nothing."""
+    await _setup(hass)
+    await hass.config.async_update(internal_url="http://ha.home.example:8123")
+    client = await hass_client_no_auth()
+    res = await client.get("/api/ha_guest/states", headers={"Host": host})
+    assert res.status == status
+    res = await client.post(
+        "/api/ha_guest/action", json={"entity_id": LIVING, "action": "turn_on"}, headers={"Host": host}
+    )
+    assert res.status == (200 if status == 200 else 403)
+    assert hass.states.get(LIVING).state == ("on" if status == 200 else "off")

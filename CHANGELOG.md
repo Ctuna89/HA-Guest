@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.1 — 2026-11-19
+
+Security fixes for the guest panel.
+
+- The panel now only answers when opened through an IP address, a `.local` name, or Home Assistant's internal or
+  external URL. Before, a website opened on any device of the home network could point its own domain name at Home
+  Assistant (DNS rebinding) and use the panel from that device's browser; with a link duration of 0 it needed no
+  link at all. The QR code already uses the internal URL, so guests notice nothing.
+- New setups require expiring links (12 hours) instead of none. Existing setups keep their value: with 0, anyone on
+  the allowed networks gets in, even with an old QR code. The form now says so; change it under
+  **Configure → Guest panel → Guest link duration**.
+- New «Security» section in the README: what the panel checks, and what a still-valid forwarded link or a copied
+  Wi-Fi name can still do.
+
 ## 0.6.0 — 2026-11-19
 
 First published release.
