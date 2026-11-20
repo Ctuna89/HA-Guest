@@ -57,6 +57,28 @@ editar dashboards, así que solo ellos pueden cambiar lo que manejan los invitad
 
 <img src="docs/guest-dashboard.png" alt="Panel de invitados armado desde un dashboard" width="320">
 
+#### Lo que ven los invitados comparado con tu dashboard
+
+Los invitados **no** ven tu dashboard tal cual: ven la página de invitados armada a partir de él. Mostrar el
+dashboard real exigiría darle a cada invitado una sesión de Home Assistant, y eso abre mucho más que sus entidades
+(otras acciones, el historial) y se saltaría el control de red. Por eso:
+
+| De tu dashboard | En la página de invitados |
+|---|---|
+| Entidades, orden, títulos de vistas y encabezados, nombres e iconos de las tarjetas | Se mantienen |
+| La foto de fondo de la vista (ajuste *Fondo* de la vista) | Se mantiene, con las tarjetas translúcidas encima |
+| Un fondo puesto por un tema (`lovelace-background`) | Se mantiene, si eliges ese tema en *Apariencia del panel de invitados* |
+| Un fondo puesto con card-mod o dentro de una tarjeta personalizada | No se detecta: ponlo en *Apariencia del panel de invitados → Imagen de fondo* |
+| Escenas, scripts y botones | Una fila de botones redondos |
+| Luces | Encender/apagar, brillo y, si tienen temperatura de color, control de tono |
+| Reproductores | Lo que suena, volumen y reproducir/pausa (sin elegir fuente ni zona) |
+| Clima | Estado y temperatura |
+| El diseño propio de tarjetas personalizadas (Mushroom, button-card, bubble-card...) | No se reproduce: sus entidades aparecen como tarjetas de la página de invitados |
+| Saludos, reloj, plantillas, markdown, ventanas emergentes, grupos desplegables | No se muestran |
+
+El amarillo de los interruptores es el color de acento por defecto de la página de invitados; pon el tuyo en
+*Apariencia del panel de invitados → Color de acento* para que combine con tu dashboard.
+
 ### Personalizar el aspecto
 
 La página sigue cómo ya tienes configurado tu Home Assistant, y el resto está en **Configurar → Apariencia del

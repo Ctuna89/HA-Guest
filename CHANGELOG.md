@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.0 — 2026-11-20
+
+The guest page now looks much closer to your dashboard.
+
+- **Background photo:** taken from the chosen dashboard's view background, the theme's `lovelace-background`, or a
+  new *Background image* setting under *Guest panel appearance* (e.g. `/local/background.jpg`). Cards turn into
+  frosted glass over a darkened photo, and «auto» mode uses dark so text stays readable.
+- **States in Home Assistant's own words and language:** «Inactivo» instead of `idle`, «Despejado, de noche» instead
+  of `clear-night`.
+- **Weather** shows its condition and temperature with a weather icon; **media players** show what is playing.
+- **Scenes, scripts and buttons** next to each other become a row of round buttons.
+- **Lights with colour temperature** get a tone slider (warm · cool).
+- The README explains what guests see compared with your dashboard, and what cannot be reproduced (custom cards'
+  own design, greetings, templates, pop-ups).
+
 ## 0.6.1 — 2026-11-19
 
 Security fixes for the guest panel.
