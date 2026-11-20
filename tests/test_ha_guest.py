@@ -320,7 +320,9 @@ async def test_appearance(hass, hass_client_no_auth, entity_registry):
     client = await hass_client_no_auth()
 
     data = await (await client.get("/api/ha_guest/states")).json()
-    assert data["appearance"] == {"mode": "auto", "theme": {"light": {}, "dark": {}}, "accent": None, "welcome": ""}
+    assert data["appearance"] == {
+        "mode": "auto", "theme": {"light": {}, "dark": {}}, "accent": None, "welcome": "", "background": None,
+    }
     assert [s["title"] for s in data["sections"]] == [None]
     assert data["sections"][0]["entities"][0]["icon"].startswith("M")  # default icon for the domain
 
@@ -344,7 +346,7 @@ async def test_appearance(hass, hass_client_no_auth, entity_registry):
 
     data = await (await client.get("/api/ha_guest/states")).json()
     assert data["appearance"] == {
-        "mode": "dark", "accent": "#ff9800", "welcome": "Wi-Fi: casa123",
+        "mode": "dark", "accent": "#ff9800", "welcome": "Wi-Fi: casa123", "background": None,
         "theme": {"light": {"--accent": "#0277bd"}, "dark": {"--accent": "#0277bd", "--bg": "#001018"}},
     }
     section, = data["sections"]
@@ -666,3 +668,60 @@ async def test_panel_only_answers_its_own_address(hass, hass_client_no_auth, hos
     )
     assert res.status == (200 if status == 200 else 403)
     assert hass.states.get(LIVING).state == ("on" if status == 200 else "off")
+
+
+
+async def test_states_in_home_assistant_words_and_tone(hass, hass_client_no_auth):
+    """Translated states, weather with its temperature, and the light's colour temperature."""
+    hass.config.language = "es"
+    hass.states.async_set("media_player.sonos", "idle", {"friendly_name": "Sonos"})
+    hass.states.async_set(
+        "weather.home", "clear-night", {"friendly_name": "Viña", "temperature": 18, "temperature_unit": "°C"}
+    )
+    calls = async_mock_service(hass, "light", "turn_on")
+    hass.states.async_set("light.living", "on", {
+        "friendly_name": "Living", "supported_color_modes": ["color_temp"], "color_temp_kelvin": 3000,
+        "min_color_temp_kelvin": 2200, "max_color_temp_kelvin": 6500,
+    })
+    await _setup(hass, panel={"entities": ["media_player.sonos", "weather.home", "light.living"]})
+    client = await hass_client_no_auth()
+
+    data = await (await client.get("/api/ha_guest/states")).json()
+    by_id = {e["entity_id"]: e for s in data["sections"] for e in s["entities"]}
+    assert by_id["media_player.sonos"]["state_label"] == "Inactivo"
+    assert by_id["weather.home"]["state_label"] == "Despejado, de noche"
+    assert by_id["weather.home"]["attributes"]["temperature"] == 18
+    assert by_id["weather.home"]["icon"] != by_id["media_player.sonos"]["icon"]
+    assert by_id["light.living"]["attributes"]["min_color_temp_kelvin"] == 2200
+
+    body = {"entity_id": "light.living", "action": "color_temp", "value": 4000}
+    assert (await client.post("/api/ha_guest/action", json=body)).status == 200
+    assert calls[-1].data == {"entity_id": "light.living", "color_temp_kelvin": 4000}
+    for value in (1000, 9000, "warm"):
+        assert (await client.post("/api/ha_guest/action", json={**body, "value": value})).status == 400
+
+
+async def test_background_from_dashboard_theme_or_setting(hass, hass_client_no_auth, hass_ws_client):
+    assert await async_setup_component(hass, "lovelace", {})
+    entry = await _setup(hass, panel={"source": "dashboard", "dashboard": "guest-view", "entities": []})
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": "lovelace/dashboards/create", "url_path": "guest-view", "title": "Guests"})
+    assert (await ws.receive_json())["success"]
+    config = {"views": [{"background": 'center / cover no-repeat url("/local/sofa.jpg") fixed',
+                         "cards": [{"type": "tile", "entity": LIVING}]}]}
+    await _save_dashboard(ws, 2, config)
+    client = await hass_client_no_auth()
+
+    async def background():
+        return (await (await client.get("/api/ha_guest/states")).json())["appearance"]["background"]
+
+    assert await background() == "/local/sofa.jpg"
+    # Something that could break out of the page's CSS is dropped.
+    config["views"][0]["background"] = 'url("/local/x.jpg\\") ; color: red")'
+    await _save_dashboard(ws, 3, config)
+    assert await background() is None
+    # The owner's own choice wins.
+    options = {**entry.options, "appearance": {"background": "/local/guests.jpg"}}
+    hass.config_entries.async_update_entry(entry, options=options)
+    await hass.async_block_till_done()
+    assert await background() == "/local/guests.jpg"

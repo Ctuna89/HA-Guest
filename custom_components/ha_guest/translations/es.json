@@ -115,6 +115,7 @@
           "mode": "Modo claro u oscuro",
           "accent": "Color de acento",
           "welcome": "Mensaje de bienvenida",
+          "background": "Imagen de fondo",
           "show_icons": "Mostrar iconos",
           "layout": "Diseño (YAML)"
         },
@@ -122,7 +123,8 @@
           "theme": "Cualquier tema instalado en tu Home Assistant.",
           "accent": "Opcional, en formato #rrggbb. Reemplaza el color principal del tema.",
           "welcome": "Opcional. Se muestra bajo el título; por ejemplo las reglas de la casa.",
-          "layout": "Opcional. Lista de secciones con título y entidades, como en una tarjeta de entidades. Cada entidad puede llevar name, icon (uno, o uno por estado), states (el texto de cada estado) y buttons (el texto de cada botón). Si lo dejas vacío, se agrupan por área. Si el panel usa un dashboard, el diseño es el del dashboard y este campo no se usa."
+          "layout": "Opcional. Lista de secciones con título y entidades, como en una tarjeta de entidades. Cada entidad puede llevar name, icon (uno, o uno por estado), states (el texto de cada estado) y buttons (el texto de cada botón). Si lo dejas vacío, se agrupan por área. Si el panel usa un dashboard, el diseño es el del dashboard y este campo no se usa.",
+          "background": "Opcional, por ejemplo /local/fondo.jpg (un archivo en la carpeta www de Home Assistant). Si lo dejas vacío se usa el fondo del dashboard elegido o el del tema. Con una imagen, las tarjetas se ven translúcidas."
         }
       },
       "home_state": {
@@ -161,7 +163,8 @@
       "invalid_layout": "El diseño no es válido. Debe ser una lista de secciones, cada una con «entities».",
       "layout_not_allowed": "El diseño usa entidades que no están en la lista del panel de invitados: {entity}",
       "no_dashboard": "Elige un dashboard.",
-      "dashboard_empty": "Ese dashboard no tiene tarjetas con entidades. El dashboard «Resumen» generado automáticamente no sirve hasta que lo edites; mejor crea uno para invitados."
+      "dashboard_empty": "Ese dashboard no tiene tarjetas con entidades. El dashboard «Resumen» generado automáticamente no sirve hasta que lo edites; mejor crea uno para invitados.",
+      "invalid_background": "Usa una dirección de Home Assistant como /local/fondo.jpg o una que empiece con https://."
     },
     "abort": {
       "no_users": "No hay usuarios para restringir. Crea primero un usuario que no sea administrador en Ajustes → Personas.",

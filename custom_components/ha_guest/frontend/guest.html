@@ -30,8 +30,39 @@
   #expiry.soon { color: var(--text); font-weight: 600; }
   #content { margin-top: 20px; }
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 24px 0 10px; }
+  .grid .wide { grid-column: 1 / -1; }
   .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  [hidden] { display: none !important; }
+
+  /* A photo behind the page, as on the dashboard: cards become frosted glass over a darkened picture. */
+  #bg { position: fixed; inset: 0; z-index: -1; background: center / cover no-repeat; }
+  #bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(rgba(0,0,0,.25), rgba(0,0,0,.55)); }
+  .photo body { background: #111; }
+  .photo .card, .photo .notice {
+    background: color-mix(in srgb, var(--card) 55%, transparent);
+    border-color: rgba(255,255,255,.12);
+    -webkit-backdrop-filter: blur(22px) saturate(1.3); backdrop-filter: blur(22px) saturate(1.3);
+  }
+  .photo h1, .photo h2, .photo #welcome, .photo #expiry { color: #fff; text-shadow: 0 1px 10px rgba(0,0,0,.45); }
+  .photo h2 { opacity: .85; }
+
+  /* Scenes, scripts and buttons in a row of round buttons, like a dashboard's scene strip. */
+  .scenes { display: grid; grid-template-columns: repeat(auto-fit, minmax(58px, 1fr)); gap: 16px 4px; }
+  .scene { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0;
+    border: 0; background: none; font-size: 14px; text-align: center; }
+  .scene span:last-child { max-width: 100%; overflow-wrap: anywhere; font-size: 13px; }
+  .scene .icon { width: 52px; height: 52px; border: 1px solid var(--control); background: var(--btn); color: var(--text); }
+  .scene .icon svg { width: 26px; height: 26px; }
+  .scene.fired .icon { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .scene:active .icon { transform: scale(.94); }
+
+  .slider-label { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-top: 12px; }
+  input.tone { -webkit-appearance: none; appearance: none; height: 28px; border-radius: 14px;
+    background: linear-gradient(90deg, #f5a742, #fff4e0 55%, #cfe3ff); }
+  input.tone::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 34px; border-radius: 5px;
+    background: #fff; border: 2px solid rgba(0,0,0,.35); }
+  input.tone::-moz-range-thumb { width: 10px; height: 34px; border-radius: 5px; background: #fff; border: 2px solid rgba(0,0,0,.35); }
   .head { display: flex; align-items: center; gap: 12px; min-height: 44px; }
   .icon {
     flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--btn); color: var(--muted);
@@ -86,6 +117,7 @@
 </style>
 </head>
 <body>
+<div id="bg" hidden></div>
 <main>
   <h1 id="title"></h1>
   <p id="welcome"></p>
@@ -101,7 +133,7 @@
     lock: "Bloquear", unlock: "Desbloquear", locked: "Bloqueado", unlocked: "Desbloqueado",
     opened: "Abierto", closed: "Cerrado", play_pause: "Play / Pausa", start: "Iniciar", dock: "A la base",
     unavailable: "No disponible", failed: "No se pudo completar la acción",
-    brightness: "Brillo", temp_down: "Bajar temperatura", temp_up: "Subir temperatura",
+    brightness: "Brillo", tone: "Tono", warm: "cálido", cool: "frío", temp_down: "Bajar temperatura", temp_up: "Subir temperatura",
     vol_down: "Bajar volumen", vol_up: "Subir volumen",
     wifi_title: "Conéctate al WiFi de la casa",
     wifi_text: "Este panel solo funciona desde la red de la casa.",
@@ -120,7 +152,7 @@
     lock: "Lock", unlock: "Unlock", locked: "Locked", unlocked: "Unlocked",
     opened: "Open", closed: "Closed", play_pause: "Play / Pause", start: "Start", dock: "Dock",
     unavailable: "Unavailable", failed: "The action could not be completed",
-    brightness: "Brightness", temp_down: "Lower temperature", temp_up: "Raise temperature",
+    brightness: "Brightness", tone: "Tone", warm: "warm", cool: "cool", temp_down: "Lower temperature", temp_up: "Raise temperature",
     vol_down: "Volume down", vol_up: "Volume up",
     wifi_title: "Connect to the home Wi‑Fi",
     wifi_text: "This panel only works from the home network.",
@@ -183,8 +215,15 @@
     return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.35 ? "#16181d" : "#ffffff";
   }
 
+  const bgEl = document.getElementById("bg");
+
   function applyTheme() {
-    const dark = appearance.mode === "dark" || (appearance.mode !== "light" && darkQuery.matches);
+    const photo = !!appearance.background;
+    // White text over a darkened photo reads best, so «auto» means dark when there is a picture.
+    const dark = appearance.mode === "dark" || (appearance.mode !== "light" && (photo || darkQuery.matches));
+    root.classList.toggle("photo", photo);
+    bgEl.hidden = !photo;
+    bgEl.style.backgroundImage = photo ? `url("${appearance.background}")` : "";
     root.dataset.mode = dark ? "dark" : "light";
     THEME_VARS.forEach(name => root.style.removeProperty(name));
     const vars = (appearance.theme || {})[dark ? "dark" : "light"] || {};
@@ -244,9 +283,40 @@
 
   function stateText(e) {
     if (e.state_text) return e.state_text;
+    const domain = e.entity_id.split(".")[0];
+    const label = e.state_label || STATE_LABEL[e.state] || e.state;
+    if (domain === "weather" && e.attributes.temperature != null) {
+      return `${label} · ${e.attributes.temperature}${e.attributes.temperature_unit || "°"}`;
+    }
+    if (domain === "media_player" && e.attributes.media_title) {
+      return [e.attributes.media_title, e.attributes.media_artist].filter(Boolean).join(" · ");
+    }
+    if (e.state_label) return e.state_label;
     const unit = e.attributes.unit_of_measurement;
     if (unit) return `${e.state} ${unit}`;
     return STATE_LABEL[e.state] || e.state;
+  }
+
+  const RUNNABLE = ["scene", "script", "button", "input_button"];
+
+  function buildScene(e) {
+    const node = el("button", "scene");
+    node.type = "button";
+    const icon = iconNode();
+    const name = el("span");
+    node.append(icon.wrap, name);
+    node.addEventListener("click", async () => {
+      node.classList.add("fired");
+      await act(node, e.entity_id, "activate");
+      setTimeout(() => node.classList.remove("fired"), 600);
+    });
+    const update = x => {
+      name.textContent = x.name;
+      node.setAttribute("aria-label", `${(x.labels && x.labels.activate) || T.activate}: ${x.name}`);
+      icon.set(x.icon);
+    };
+    update(e);
+    return { node, update };
   }
 
   // Builds the card once and returns the function that refreshes it with new data.
@@ -301,6 +371,23 @@
           }
         });
       }
+      if (domain === "light" && modes.includes("color_temp")) {
+        const head2 = el("div", "slider-label");
+        head2.append(el("span", "", T.tone), el("span", "", `${T.warm} · ${T.cool}`));
+        const r = row();
+        const tone = el("input", "tone");
+        tone.type = "range"; tone.step = 50;
+        tone.addEventListener("change", () => act(card, id, "color_temp", Number(tone.value)));
+        r.append(tone);
+        card.insertBefore(head2, r);
+        updaters.push(x => {
+          tone.min = x.attributes.min_color_temp_kelvin || 2000;
+          tone.max = x.attributes.max_color_temp_kelvin || 6500;
+          tone.setAttribute("aria-label", `${T.tone}, ${x.name}`);
+          r.hidden = head2.hidden = x.state !== "on";
+          if (document.activeElement !== tone && x.attributes.color_temp_kelvin != null) tone.value = x.attributes.color_temp_kelvin;
+        });
+      }
     } else if (domain === "cover" || domain === "valve") {
       const r = row();
       const open = button(L("open"), () => act(card, id, "open"));
@@ -338,16 +425,14 @@
         target = x.attributes.temperature ?? null;
         value.textContent = target == null ? "–" : `${target}°`;
         const current = x.attributes.current_temperature;
-        state.textContent = (x.state_text || STATE_LABEL[x.state] || x.state) + (current != null ? ` · ${current}°` : "");
+        state.textContent = (x.state_text || x.state_label || STATE_LABEL[x.state] || x.state) + (current != null ? ` · ${current}°` : "");
       });
     } else if (domain === "media_player") {
       const r = row();
       r.append(button("−", () => act(card, id, "volume_down"), "", T.vol_down),
-        button(L("play_pause"), () => act(card, id, "play_pause")),
+        button((e.labels && e.labels.play_pause) || "⏯", () => act(card, id, "play_pause"), "", T.play_pause),
         button("+", () => act(card, id, "volume_up"), "", T.vol_up));
-      updaters.push(x => {
-        if (x.attributes.media_title) state.textContent = x.attributes.media_title;
-      });
+
     } else if (domain === "vacuum") {
       const r = row();
       r.append(button(L("start"), () => act(card, id, "start")), button(L("dock"), () => act(card, id, "dock")));
@@ -404,7 +489,22 @@
       for (const section of data.sections) {
         if (section.title) nodes.push(el("h2", "", section.title));
         const grid = el("div", "grid");
+        let strip = null;
         for (const e of section.entities) {
+          // Consecutive scenes, scripts and buttons share one card, as a row of round buttons.
+          if (RUNNABLE.includes(e.entity_id.split(".")[0])) {
+            if (!strip) {
+              const card = el("div", "card wide");
+              strip = el("div", "scenes");
+              card.append(strip);
+              grid.append(card);
+            }
+            const built = buildScene(e);
+            cards.set(e.entity_id, built.update);
+            strip.append(built.node);
+            continue;
+          }
+          strip = null;
           const built = buildCard(e);
           cards.set(e.entity_id, built.update);
           grid.append(built.card);

@@ -18,6 +18,7 @@ from .const import (
     CONF_ALWAYS_ENTITIES,
     CONF_APPEARANCE,
     CONF_AWAY_READ,
+    CONF_BACKGROUND,
     CONF_CONDITION_ENTITY,
     CONF_CONDITION_STATES,
     CONF_ENABLED,
@@ -54,6 +55,7 @@ from .const import (
     SOURCE_ENTITIES,
 )
 from .dashboard import async_dashboard_plan, dashboard_options
+from .panel import background_url
 from .invite import new_secret
 
 ENTITIES = selector.EntitySelector(selector.EntitySelectorConfig(multiple=True))
@@ -220,6 +222,9 @@ class GuestOptionsFlow(OptionsFlow):
             layout = user_input.get(CONF_LAYOUT) or []
             if accent and not HEX_COLOR.match(accent):
                 errors[CONF_ACCENT] = "invalid_color"
+            background = (user_input.get(CONF_BACKGROUND) or "").strip()
+            if background and not background_url(background):
+                errors[CONF_BACKGROUND] = "invalid_background"
             try:
                 layout = LAYOUT_SCHEMA(layout)
             except vol.Invalid:
@@ -234,7 +239,7 @@ class GuestOptionsFlow(OptionsFlow):
                     errors[CONF_LAYOUT] = "layout_not_allowed"
                     placeholders["entity"] = ", ".join(missing)
             if not errors:
-                appearance = {**user_input, CONF_ACCENT: accent, CONF_LAYOUT: layout}
+                appearance = {**user_input, CONF_ACCENT: accent, CONF_LAYOUT: layout, CONF_BACKGROUND: background}
                 return self._save(**{CONF_APPEARANCE: appearance})
 
         themes = [DEFAULT_THEME, *sorted(self.hass.data.get("frontend_themes", {}))]
@@ -250,6 +255,7 @@ class GuestOptionsFlow(OptionsFlow):
             ),
             vol.Optional(CONF_ACCENT): selector.TextSelector(),
             vol.Optional(CONF_WELCOME): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
+            vol.Optional(CONF_BACKGROUND): selector.TextSelector(),
             vol.Required(CONF_SHOW_ICONS, default=True): selector.BooleanSelector(),
             vol.Optional(CONF_LAYOUT): selector.ObjectSelector(),
         })

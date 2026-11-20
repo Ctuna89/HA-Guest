@@ -67,6 +67,16 @@ appearance**:
 - **Light or dark mode**, an **accent colour** (`#rrggbb`) that replaces the theme's primary colour, and whether
   to **show icons**.
 - **Welcome message:** shown under the title, for example the house rules.
+- **Background image:** a photo behind the page, with frosted-glass cards over it, like a dashboard with a
+  background. It is taken, in this order, from the *Background image* setting (e.g. `/local/background.jpg`, a file
+  in Home Assistant's `www` folder), the chosen dashboard's view background, or the theme's `lovelace-background`.
+  With a photo, «light or dark: auto» uses dark mode so text stays readable.
+
+States are shown in Home Assistant's own words and language («Inactivo», «Despejado, de noche · 18 °C»). Scenes,
+scripts and buttons next to each other become a row of round buttons, and lights with colour temperature get a
+tone slider.
+
+<img src="docs/guest-photo.png" alt="Guest panel with a photo background" width="320">
 - **Layout (YAML):** by default entities are grouped by area. To choose the order, sections, and per-card names
   and icons, write a layout in the same style as a dashboard's entities card:
 

@@ -37,8 +37,8 @@ def dashboard_options(hass: HomeAssistant) -> list[dict[str, str]]:
     return sorted(options, key=lambda option: (option["value"] != DEFAULT_DASHBOARD, option["label"].casefold()))
 
 
-async def async_dashboard_plan(hass: HomeAssistant, url_path: str | None) -> Plan | None:
-    """The dashboard as sections of cards, or None if it does not exist or is auto-generated."""
+async def async_dashboard_config(hass: HomeAssistant, url_path: str | None) -> dict[str, Any] | None:
+    """The dashboard's configuration, or None if it does not exist or is auto-generated."""
     data = _lovelace(hass)
     key = None if url_path in (None, DEFAULT_DASHBOARD) else url_path
     if data is None or (dashboard := data.dashboards.get(key)) is None:
@@ -47,7 +47,23 @@ async def async_dashboard_plan(hass: HomeAssistant, url_path: str | None) -> Pla
         config = await dashboard.async_load(False)
     except Exception:  # noqa: BLE001 - ConfigNotFound, an unreadable YAML file, recovery mode...
         return None
-    return plan_from_config(config)
+    return config if isinstance(config, dict) else None
+
+
+async def async_dashboard_plan(hass: HomeAssistant, url_path: str | None) -> Plan | None:
+    """The dashboard as sections of cards, or None if it does not exist or is auto-generated."""
+    config = await async_dashboard_config(hass, url_path)
+    return None if config is None else plan_from_config(config)
+
+
+def background_from_config(config: Any) -> Any:
+    """The first view's background setting, as the dashboard stores it (a CSS string or {image: ...})."""
+    views = config.get("views") if isinstance(config, dict) else None
+    if isinstance(views, list):
+        for view in views:
+            if isinstance(view, dict) and view.get("background"):
+                return view["background"]
+    return None
 
 
 def plan_from_config(config: Any) -> Plan:

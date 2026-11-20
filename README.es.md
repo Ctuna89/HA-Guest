@@ -69,6 +69,16 @@ panel de invitados**:
 - **Modo claro u oscuro**, un **color de acento** (`#rrggbb`) que reemplaza el color principal del tema, y si se
   **muestran iconos**.
 - **Mensaje de bienvenida:** se muestra bajo el título, por ejemplo las reglas de la casa.
+- **Imagen de fondo:** una foto detrás de la página, con las tarjetas translúcidas encima, como un dashboard con
+  fondo. Se toma, en este orden, del ajuste *Imagen de fondo* (p. ej. `/local/fondo.jpg`, un archivo en la carpeta
+  `www` de Home Assistant), del fondo de la vista del dashboard elegido, o del `lovelace-background` del tema. Con
+  una foto, «modo claro u oscuro: según el teléfono» usa el modo oscuro para que el texto se lea bien.
+
+Los estados se muestran con las palabras e idioma de tu Home Assistant («Inactivo», «Despejado, de noche · 18 °C»).
+Las escenas, scripts y botones seguidos se agrupan en una fila de botones redondos, y las luces con temperatura de
+color tienen un control de tono.
+
+<img src="docs/guest-photo.png" alt="Panel de invitados con foto de fondo" width="320">
 - **Diseño (YAML):** por defecto las entidades se agrupan por área. Para elegir el orden, las secciones y los
   nombres e iconos de cada tarjeta, escribe un diseño con el mismo estilo que una tarjeta de entidades:
 
