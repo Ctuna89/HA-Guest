@@ -25,6 +25,7 @@ CONF_ACCENT = "accent"
 CONF_WELCOME = "welcome"
 CONF_SHOW_ICONS = "show_icons"
 CONF_LAYOUT = "layout"
+CONF_BACKGROUND = "background"
 DEFAULT_THEME = "default"
 
 CONF_SAFETY = "safety"

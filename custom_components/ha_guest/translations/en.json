@@ -115,6 +115,7 @@
           "mode": "Light or dark mode",
           "accent": "Accent colour",
           "welcome": "Welcome message",
+          "background": "Background image",
           "show_icons": "Show icons",
           "layout": "Layout (YAML)"
         },
@@ -122,7 +123,8 @@
           "theme": "Any theme installed in your Home Assistant.",
           "accent": "Optional, as #rrggbb. Replaces the theme's primary colour.",
           "welcome": "Optional. Shown under the title; for example the house rules.",
-          "layout": "Optional. A list of sections with a title and entities, as in an entities card. Each entity can have its own name, icon (one, or one per state), states (the text shown for each state) and buttons (the text of each button). Leave it empty to group by area. If the panel uses a dashboard, the dashboard is the layout and this field is not used."
+          "layout": "Optional. A list of sections with a title and entities, as in an entities card. Each entity can have its own name, icon (one, or one per state), states (the text shown for each state) and buttons (the text of each button). Leave it empty to group by area. If the panel uses a dashboard, the dashboard is the layout and this field is not used.",
+          "background": "Optional, for example /local/background.jpg (a file in Home Assistant's www folder). If empty, the chosen dashboard's or the theme's background is used. With an image, cards look translucent."
         }
       },
       "home_state": {
@@ -161,7 +163,8 @@
       "invalid_layout": "The layout is not valid. It must be a list of sections, each with «entities».",
       "layout_not_allowed": "The layout uses entities that are not on the guest panel's list: {entity}",
       "no_dashboard": "Choose a dashboard.",
-      "dashboard_empty": "That dashboard has no cards with entities. The auto-generated «Overview» dashboard does not count until you edit it; better create one for guests."
+      "dashboard_empty": "That dashboard has no cards with entities. The auto-generated «Overview» dashboard does not count until you edit it; better create one for guests.",
+      "invalid_background": "Use a Home Assistant address such as /local/background.jpg, or one starting with https://."
     },
     "abort": {
       "no_users": "There are no users to restrict. First create a non-administrator user in Settings → People.",

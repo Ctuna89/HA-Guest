@@ -10,6 +10,7 @@ how to translate into a service call.
 from __future__ import annotations
 
 from http import HTTPStatus
+import re
 from ipaddress import ip_address, ip_network
 from pathlib import Path
 from typing import Any
@@ -22,10 +23,12 @@ from homeassistant.core import Context, HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
 from homeassistant.helpers.network import is_cloud_connection
+from homeassistant.helpers.translation import async_get_translations
 
 from .const import (
     CONF_ACCENT,
     CONF_APPEARANCE,
+    CONF_BACKGROUND,
     CONF_LAYOUT,
     CONF_MODE,
     CONF_SHOW_ICONS,
@@ -49,15 +52,18 @@ from .const import (
     TOKEN_HEADER,
 )
 from .activity import Guest, GuestRuntime
-from .dashboard import Plan, async_dashboard_plan
+from .dashboard import Plan, async_dashboard_config, async_dashboard_plan, background_from_config
 from .icons import async_icon_path
 from .invite import link_seconds, token_expiry
 
 ATTRIBUTES = (
-    "brightness", "supported_color_modes", "current_position", "temperature", "current_temperature",
-    "min_temp", "max_temp", "target_temp_step", "hvac_modes", "volume_level", "media_title",
+    "brightness", "supported_color_modes", "color_temp_kelvin", "min_color_temp_kelvin", "max_color_temp_kelvin",
+    "current_position", "temperature", "temperature_unit", "current_temperature", "humidity",
+    "min_temp", "max_temp", "target_temp_step", "hvac_modes", "volume_level", "media_title", "media_artist",
     "unit_of_measurement", "device_class",
 )
+BACKGROUND_URL = re.compile(r"""url\(\s*(['"]?)([^'")\s]+)\1\s*\)""")
+SAFE_URL = re.compile(r"""^(/(?!/)|https://)[^\s"'()\\<>]+$""")
 
 DOMAIN_ICONS = {
     "light": "mdi:lightbulb", "switch": "mdi:toggle-switch-variant", "input_boolean": "mdi:toggle-switch-variant",
@@ -77,6 +83,14 @@ DEFAULT_ICON = "mdi:eye"
 STATE_ICONS = {
     ("lock", "unlocked"): "mdi:lock-open-variant", ("lock", "open"): "mdi:lock-open-variant",
     ("lock", "jammed"): "mdi:lock-alert", ("light", "off"): "mdi:lightbulb-outline",
+    ("weather", "clear-night"): "mdi:weather-night", ("weather", "cloudy"): "mdi:weather-cloudy",
+    ("weather", "exceptional"): "mdi:alert-circle-outline", ("weather", "fog"): "mdi:weather-fog",
+    ("weather", "hail"): "mdi:weather-hail", ("weather", "lightning"): "mdi:weather-lightning",
+    ("weather", "lightning-rainy"): "mdi:weather-lightning-rainy", ("weather", "partlycloudy"): "mdi:weather-partly-cloudy",
+    ("weather", "pouring"): "mdi:weather-pouring", ("weather", "rainy"): "mdi:weather-rainy",
+    ("weather", "snowy"): "mdi:weather-snowy", ("weather", "snowy-rainy"): "mdi:weather-snowy-rainy",
+    ("weather", "sunny"): "mdi:weather-sunny", ("weather", "windy"): "mdi:weather-windy",
+    ("weather", "windy-variant"): "mdi:weather-windy-variant", ("media_player", "off"): "mdi:speaker-off",
     ("cover", "open"): "mdi:window-shutter-open", ("door", "on"): "mdi:door-open", ("window", "on"): "mdi:window-open",
     ("garage", "open"): "mdi:garage-open", ("garage", "on"): "mdi:garage-open",
     ("curtain", "open"): "mdi:curtains", ("curtain", "closed"): "mdi:curtains-closed",
@@ -141,6 +155,10 @@ def resolve_action(state: State, action: Any, value: Any) -> tuple[str, dict[str
         return service, {}
     if (domain, action) == ("light", "brightness"):
         return "turn_on", {"brightness_pct": int(_number(value, 1, 100))}
+    if (domain, action) == ("light", "color_temp"):
+        low = state.attributes.get("min_color_temp_kelvin") or 2000
+        high = state.attributes.get("max_color_temp_kelvin") or 6500
+        return "turn_on", {"color_temp_kelvin": int(_number(value, low, high))}
     if (domain, action) == ("cover", "position"):
         return "set_cover_position", {"position": int(_number(value, 0, 100))}
     if (domain, action) == ("media_player", "volume"):
@@ -232,6 +250,46 @@ def _area_name(hass: HomeAssistant, entity_id: str) -> str | None:
     return area.name if area else None
 
 
+def background_url(value: Any) -> str | None:
+    """An image address from a dashboard or theme background setting, if it is safe to put in the page.
+
+    Accepts a CSS value with url(...), a {image: ...} setting, or a bare address. Only addresses on Home Assistant
+    itself (/local/..., /api/image/serve/...) or https:// are kept, and nothing that could break out of a CSS url().
+    """
+    if isinstance(value, dict):
+        value = value.get("image")
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if match := BACKGROUND_URL.search(value):
+        value = match.group(2)
+    return value if SAFE_URL.match(value) else None
+
+
+async def async_state_labels(hass: HomeAssistant, states: list[State]) -> dict[str, str]:
+    """Each state in Home Assistant's own words and language («Inactivo», «Despejado, de noche»...)."""
+    registry = er.async_get(hass)
+    domains = {state.domain for state in states}
+    platforms = {entry.platform for state in states if (entry := registry.async_get(state.entity_id))}
+    language = hass.config.language or "en"
+    component = await async_get_translations(hass, language, "entity_component", domains)
+    entity = await async_get_translations(hass, language, "entity", platforms) if platforms else {}
+    labels = {}
+    for state in states:
+        entry = registry.async_get(state.entity_id)
+        keys = []
+        if entry and entry.translation_key:
+            keys.append(f"component.{entry.platform}.entity.{state.domain}.{entry.translation_key}.state.{state.state}")
+        if device_class := state.attributes.get("device_class"):
+            keys.append(f"component.{state.domain}.entity_component.{device_class}.state.{state.state}")
+        keys.append(f"component.{state.domain}.entity_component._.state.{state.state}")
+        for key in keys:
+            if label := entity.get(key) or component.get(key):
+                labels[state.entity_id] = label
+                break
+    return labels
+
+
 def theme_variables(hass: HomeAssistant, name: str | None) -> dict[str, dict[str, str]]:
     """A Home Assistant theme as the guest page's variables, for light and for dark mode."""
     theme = hass.data.get("frontend_themes", {}).get(name) if name and name != DEFAULT_THEME else None
@@ -312,6 +370,8 @@ async def async_build_sections(hass: HomeAssistant, conf: dict[str, Any]) -> lis
         if None in by_area:
             plan.append((None, by_area[None]))
 
+    states = [s for _, items in plan for item in items if (s := hass.states.get(item.get("entity") or ""))]
+    labels = await async_state_labels(hass, states)
     sections = []
     for title, items in plan:
         entities = []
@@ -327,6 +387,7 @@ async def async_build_sections(hass: HomeAssistant, conf: dict[str, Any]) -> lis
                 "state": state.state,
                 # The owner's own words for this card's state and buttons, when the layout gives them.
                 "state_text": (item.get("states") or {}).get(state.state),
+                "state_label": labels.get(entity_id),
                 "labels": item.get("buttons") or {},
                 "icon": icon,
                 "attributes": {k: state.attributes[k] for k in ATTRIBUTES if k in state.attributes},
@@ -334,6 +395,21 @@ async def async_build_sections(hass: HomeAssistant, conf: dict[str, Any]) -> lis
         if entities:
             sections.append({"title": title, "entities": entities})
     return sections
+
+
+async def async_background(hass: HomeAssistant, conf: dict[str, Any]) -> str | None:
+    """The page background: the owner's own choice, else the chosen dashboard's, else the theme's."""
+    appearance = conf.get(CONF_APPEARANCE, {})
+    if url := background_url(appearance.get(CONF_BACKGROUND)):
+        return url
+    if conf.get(CONF_SOURCE) == SOURCE_DASHBOARD:
+        config = await async_dashboard_config(hass, conf.get(CONF_DASHBOARD))
+        if url := background_url(background_from_config(config)):
+            return url
+    theme = hass.data.get("frontend_themes", {}).get(appearance.get(CONF_THEME))
+    if isinstance(theme, dict):
+        return background_url(theme.get("lovelace-background"))
+    return None
 
 
 class _GuestView(HomeAssistantView):
@@ -404,12 +480,14 @@ class GuestStatesView(_GuestView):
         hass, conf, runtime, guest = guard
         runtime.async_seen(guest)
         appearance = conf.get(CONF_APPEARANCE, {})
+        theme = theme_variables(hass, appearance.get(CONF_THEME))
         return self.json({
             "title": conf.get(CONF_TITLE) or DEFAULT_TITLE,
             "expires": guest.expires,
             "appearance": {
                 "mode": appearance.get(CONF_MODE, "auto"),
-                "theme": theme_variables(hass, appearance.get(CONF_THEME)),
+                "theme": theme,
+                "background": await async_background(hass, conf),
                 "accent": appearance.get(CONF_ACCENT) or None,
                 "welcome": appearance.get(CONF_WELCOME) or "",
             },

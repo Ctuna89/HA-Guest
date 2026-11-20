@@ -55,6 +55,28 @@ used. In Home Assistant only administrators can edit dashboards, so only they ca
 
 <img src="docs/guest-dashboard.png" alt="Guest panel built from a dashboard" width="320">
 
+#### What guests see compared with your dashboard
+
+Guests do **not** see your dashboard as it is: they see the guest page, built from it. Showing the real dashboard
+would mean giving each guest a Home Assistant session, which opens much more than their entities (other actions,
+history) and would bypass the network check. So:
+
+| From your dashboard | On the guest page |
+|---|---|
+| Entities, order, view and heading titles, card names and icons | Kept |
+| The view's background photo (*Background* setting of the view) | Kept, with frosted-glass cards over it |
+| A background set by a theme (`lovelace-background`) | Kept, if you choose that theme under *Guest panel appearance* |
+| A background set with card-mod or inside a custom card | Not detected: set it under *Guest panel appearance → Background image* |
+| Scenes, scripts and buttons | A row of round buttons |
+| Lights | On/off, brightness and, with colour temperature, a tone slider |
+| Media players | What is playing, volume and play/pause (no source or zone selection) |
+| Weather | Condition and temperature |
+| Custom cards' own design (Mushroom, button-card, bubble-card...) | Not reproduced: their entities appear as guest-page cards |
+| Greetings, clock, templates, markdown, pop-ups, expandable groups | Not shown |
+
+The yellow of switches is the guest page's default accent colour; set your own under *Guest panel appearance →
+Accent colour* to match your dashboard.
+
 ### Customising the look
 
 The page follows how your Home Assistant is already set up, and the rest is under **Configure → Guest panel
@@ -67,6 +89,16 @@ appearance**:
 - **Light or dark mode**, an **accent colour** (`#rrggbb`) that replaces the theme's primary colour, and whether
   to **show icons**.
 - **Welcome message:** shown under the title, for example the house rules.
+- **Background image:** a photo behind the page, with frosted-glass cards over it, like a dashboard with a
+  background. It is taken, in this order, from the *Background image* setting (e.g. `/local/background.jpg`, a file
+  in Home Assistant's `www` folder), the chosen dashboard's view background, or the theme's `lovelace-background`.
+  With a photo, «light or dark: auto» uses dark mode so text stays readable.
+
+States are shown in Home Assistant's own words and language («Inactivo», «Despejado, de noche · 18 °C»). Scenes,
+scripts and buttons next to each other become a row of round buttons, and lights with colour temperature get a
+tone slider.
+
+<img src="docs/guest-photo.png" alt="Guest panel with a photo background" width="320">
 - **Layout (YAML):** by default entities are grouped by area. To choose the order, sections, and per-card names
   and icons, write a layout in the same style as a dashboard's entities card:
 
