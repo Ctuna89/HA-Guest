@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from http import HTTPStatus
+import secrets
 import re
 import time
 from ipaddress import ip_address, ip_network
@@ -32,6 +33,7 @@ from .const import (
     CONF_ACCENT,
     CONF_APPEARANCE,
     CONF_BACKGROUND,
+    CONF_EXPIRED_MESSAGE,
     CONF_LAYOUT,
     CONF_MODE,
     CONF_SHOW_ICONS,
@@ -69,8 +71,11 @@ ATTRIBUTES = (
     "brightness", "supported_color_modes", "color_temp_kelvin", "min_color_temp_kelvin", "max_color_temp_kelvin",
     "current_position", "temperature", "temperature_unit", "current_temperature", "humidity",
     "min_temp", "max_temp", "target_temp_step", "hvac_modes", "volume_level", "media_title", "media_artist",
-    "unit_of_measurement", "device_class",
+    "unit_of_measurement", "device_class", "percentage", "percentage_step", "supported_features",
 )
+LOCK_OPEN = 1  # LockEntityFeature.OPEN
+ACTIONS_PER_MINUTE = 30  # per guest; a person tapping never gets near it
+REDEEMS_PER_MINUTE = 10  # per address, for permanent codes
 BACKGROUND_URL = re.compile(r"""url\(\s*(['"]?)([^'")\s]+)\1\s*\)""")
 SAFE_URL = re.compile(r"""^(/(?!/)|https://)[^\s"'()\\<>]+$""")
 
@@ -132,7 +137,7 @@ SIMPLE_ACTIONS: dict[str, dict[str, str]] = {
     "humidifier": ON_OFF,
     "cover": {"open": "open_cover", "close": "close_cover", "stop": "stop_cover"},
     "valve": {"open": "open_valve", "close": "close_valve"},
-    "lock": {"lock": "lock", "unlock": "unlock"},
+    "lock": {"lock": "lock", "unlock": "unlock"},  # «open» (unlatch) only where the lock supports it, below
     "scene": {"activate": "turn_on"},
     "script": {"activate": "turn_on"},
     "button": {"activate": "press"},
@@ -174,6 +179,12 @@ def resolve_action(state: State, action: Any, value: Any) -> tuple[str, dict[str
         return service, {}
     if (domain, action) == ("light", "brightness"):
         return "turn_on", {"brightness_pct": int(_number(value, 1, 100))}
+    if (domain, action) == ("lock", "open"):
+        if not int(state.attributes.get("supported_features") or 0) & LOCK_OPEN:
+            raise InvalidAction
+        return "open", {}
+    if (domain, action) == ("fan", "percentage"):
+        return "set_percentage", {"percentage": int(_number(value, 0, 100))}
     if (domain, action) == ("light", "color_temp"):
         low = state.attributes.get("min_color_temp_kelvin") or 2000
         high = state.attributes.get("max_color_temp_kelvin") or 6500
@@ -450,6 +461,12 @@ async def async_background(hass: HomeAssistant, conf: dict[str, Any]) -> str | N
 class _GuestView(HomeAssistantView):
     requires_auth = False
 
+    @staticmethod
+    def _link_error(conf: dict[str, Any]) -> dict[str, Any]:
+        """The owner's own words for a guest whose link no longer works («Text me on ...»), if any."""
+        message = conf.get(CONF_APPEARANCE, {}).get(CONF_EXPIRED_MESSAGE) or ""
+        return {"error": "link", "message": message}
+
     def json(self, result: Any, status_code: int = HTTPStatus.OK, headers: Any = None) -> web.Response:
         return super().json(result, status_code, headers={**SECURITY_HEADERS, **(headers or {})})
 
@@ -499,7 +516,7 @@ class _GuestView(HomeAssistantView):
             # Opening the bare address is ordinary; presenting a link that no longer works is worth reporting.
             if token:
                 runtime.async_blocked(guest, "link")
-            return self.json({"error": "link"}, HTTPStatus.FORBIDDEN)
+            return self.json(self._link_error(conf), HTTPStatus.FORBIDDEN)
         if not runtime.panel_open():
             # The same answer whatever the reason: it must not tell someone outside that nobody is home.
             runtime.async_blocked(guest, "paused")
@@ -524,9 +541,18 @@ class GuestPageView(HomeAssistantView):
         if self._html is None:
             path = Path(__file__).parent / "frontend" / "guest.html"
             self._html = await hass.async_add_executor_job(path.read_text, "utf-8")
+        # Only this page's own script and styles may run, with a fresh nonce each time; images may come from Home
+        # Assistant or https (a background photo), and the page may only talk to Home Assistant itself.
+        nonce = secrets.token_urlsafe(16)
+        html = self._html.replace("<script>", f'<script nonce="{nonce}">').replace("<style>", f'<style nonce="{nonce}">')
+        policy = (
+            f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; "
+            "img-src 'self' https: data:; connect-src 'self'; manifest-src 'self'; "
+            "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+        )
         return web.Response(
-            text=self._html, content_type="text/html",
-            headers={"Cache-Control": "no-store", "X-Frame-Options": "DENY"},
+            text=html, content_type="text/html",
+            headers={**SECURITY_HEADERS, "Content-Security-Policy": policy},
         )
 
 
@@ -576,6 +602,8 @@ class GuestActionView(_GuestView):
             return self.json({"error": "invalid"}, HTTPStatus.BAD_REQUEST)
         if not isinstance(body, dict):
             return self.json({"error": "invalid"}, HTTPStatus.BAD_REQUEST)
+        if not runtime.allow(f"action:{guest.key}", ACTIONS_PER_MINUTE):
+            return self.json({"error": "rate"}, HTTPStatus.TOO_MANY_REQUESTS)
 
         entity_id = body.get("entity_id")
         if (
@@ -615,6 +643,8 @@ class GuestRedeemView(_GuestView):
         if isinstance(place, web.Response):
             return place
         _, conf, runtime = place
+        if not runtime.allow(f"redeem:{request.remote}", REDEEMS_PER_MINUTE):
+            return self.json({"error": "rate"}, HTTPStatus.TOO_MANY_REQUESTS)
         if request.content_type != "application/json":
             return self.json({"error": "invalid"}, HTTPStatus.BAD_REQUEST)
         try:
@@ -625,7 +655,7 @@ class GuestRedeemView(_GuestView):
         guest = Guest(ip=str(request.remote))
         if not isinstance(body, dict) or (ref := find_code(codes, body.get("key"))) is None:
             runtime.async_blocked(guest, "link")
-            return self.json({"error": "link"}, HTTPStatus.FORBIDDEN)
+            return self.json(self._link_error(conf), HTTPStatus.FORBIDDEN)
         if not runtime.panel_open():
             runtime.async_blocked(guest, "paused")
             return self.json({"error": "paused"}, HTTPStatus.FORBIDDEN)

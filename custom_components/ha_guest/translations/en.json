@@ -116,6 +116,7 @@
           "mode": "Light or dark mode",
           "accent": "Accent colour",
           "welcome": "Welcome message",
+          "expired_message": "Message when a link no longer works",
           "background": "Background image",
           "show_icons": "Show icons",
           "layout": "Layout (YAML)"
@@ -125,7 +126,8 @@
           "accent": "Optional, as #rrggbb. Replaces the theme's primary colour.",
           "welcome": "Optional. Shown under the title; for example the house rules.",
           "layout": "Optional. A list of sections with a title and entities, as in an entities card. Each entity can have its own name, icon (one, or one per state), states (the text shown for each state) and buttons (the text of each button). Leave it empty to group by area. If the panel uses a dashboard, the dashboard is the layout and this field is not used.",
-          "background": "Optional, for example /local/background.jpg (a file in Home Assistant's www folder). If empty, the chosen dashboard's or the theme's background is used. With an image, cards look translucent."
+          "background": "Optional, for example /local/background.jpg (a file in Home Assistant's www folder). If empty, the chosen dashboard's or the theme's background is used. With an image, cards look translucent.",
+          "expired_message": "Optional. Shown to a guest whose link expired or was revoked, for example «Text me on +1 555 0100 and I'll send you a new one»."
         }
       },
       "home_state": {

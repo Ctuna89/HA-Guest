@@ -136,6 +136,8 @@
     lock: "Bloquear", unlock: "Desbloquear", locked: "Bloqueado", unlocked: "Desbloqueado",
     opened: "Abierto", closed: "Cerrado", play_pause: "Play / Pausa", start: "Iniciar", dock: "A la base",
     unavailable: "No disponible", failed: "No se pudo completar la acción",
+    rate: "Demasiadas acciones seguidas. Espera un momento.", unlatch: "Abrir pestillo", speed: "Velocidad",
+    volume: "Volumen",
     brightness: "Brillo", tone: "Tono", warm: "cálido", cool: "frío", temp_down: "Bajar temperatura", temp_up: "Subir temperatura",
     vol_down: "Bajar volumen", vol_up: "Subir volumen",
     wifi_title: "Conéctate al WiFi de la casa",
@@ -155,6 +157,7 @@
     lock: "Lock", unlock: "Unlock", locked: "Locked", unlocked: "Unlocked",
     opened: "Open", closed: "Closed", play_pause: "Play / Pause", start: "Start", dock: "Dock",
     unavailable: "Unavailable", failed: "The action could not be completed",
+    rate: "Too many actions in a row. Wait a moment.", unlatch: "Unlatch", speed: "Speed", volume: "Volume",
     brightness: "Brightness", tone: "Tone", warm: "warm", cool: "cool", temp_down: "Lower temperature", temp_up: "Raise temperature",
     vol_down: "Volume down", vol_up: "Volume up",
     wifi_title: "Connect to the home Wi‑Fi",
@@ -276,7 +279,8 @@
         method: "POST", headers: { "Content-Type": "application/json", ...auth },
         body: JSON.stringify({ entity_id, action, value }),
       });
-      if (!res.ok) throw new Error();
+      if (res.status === 429) toast(T.rate);
+      else if (!res.ok) throw new Error();
     } catch (err) {
       toast(T.failed);
     }
@@ -394,6 +398,24 @@
           }
         });
       }
+      if (domain === "fan" && e.attributes.percentage != null) {
+        const r = row();
+        const speed = el("input");
+        speed.type = "range"; speed.min = 0; speed.max = 100;
+        speed.step = e.attributes.percentage_step || 1;
+        const value = el("span", "value");
+        speed.addEventListener("input", () => { value.textContent = `${speed.value}%`; });
+        speed.addEventListener("change", () => act(card, id, "percentage", Number(speed.value)));
+        r.append(speed, value);
+        updaters.push(x => {
+          speed.setAttribute("aria-label", `${T.speed}, ${x.name}`);
+          r.hidden = x.state !== "on";
+          if (document.activeElement !== speed && x.attributes.percentage != null) {
+            speed.value = x.attributes.percentage;
+            value.textContent = `${speed.value}%`;
+          }
+        });
+      }
       if (domain === "light" && modes.includes("color_temp")) {
         const head2 = el("div", "slider-label");
         head2.append(el("span", "", T.tone), el("span", "", `${T.warm} · ${T.cool}`));
@@ -431,6 +453,9 @@
       const unlock = button(L("unlock"), () => act(card, id, "unlock"));
       const lock = button(L("lock"), () => act(card, id, "lock"));
       r.append(unlock, lock);
+      if ((e.attributes.supported_features || 0) & 1) {
+        row().append(button(L("unlatch") || T.unlatch, () => act(card, id, "open")));
+      }
       updaters.push(x => {
         unlock.disabled = x.state === "unlocked";
         lock.disabled = x.state === "locked";
@@ -452,9 +477,24 @@
       });
     } else if (domain === "media_player") {
       const r = row();
-      r.append(button("−", () => act(card, id, "volume_down"), "", T.vol_down),
-        button((e.labels && e.labels.play_pause) || "⏯", () => act(card, id, "play_pause"), "", T.play_pause),
-        button("+", () => act(card, id, "volume_up"), "", T.vol_up));
+      const play = button((e.labels && e.labels.play_pause) || "⏯", () => act(card, id, "play_pause"), "", T.play_pause);
+      if (e.attributes.volume_level != null) {
+        // A volume slider where the player reports its level; − and + otherwise.
+        const volume = el("input");
+        volume.type = "range"; volume.min = 0; volume.max = 100; volume.step = 1;
+        volume.setAttribute("aria-label", `${T.volume}, ${e.name}`);
+        volume.addEventListener("change", () => act(card, id, "volume", Number(volume.value)));
+        r.append(play, volume);
+        play.style.flex = "0 0 64px";
+        updaters.push(x => {
+          if (document.activeElement !== volume && x.attributes.volume_level != null) {
+            volume.value = Math.round(x.attributes.volume_level * 100);
+          }
+        });
+      } else {
+        r.append(button("−", () => act(card, id, "volume_down"), "", T.vol_down), play,
+          button("+", () => act(card, id, "volume_up"), "", T.vol_up));
+      }
 
     } else if (domain === "vacuum") {
       const r = row();
@@ -559,7 +599,7 @@
       showExpiry(null);
       if (res.status !== 403) return notice(T.off_title, T.off_text);
       const body = await res.json().catch(() => ({}));
-      if (body.error === "link") return notice(T.link_title, T.link_text);
+      if (body.error === "link") return notice(T.link_title, body.message || T.link_text);
       if (body.error === "paused") return notice(T.paused_title, T.paused_text);
       if (body.error === "host") return notice(T.host_title, T.host_text);
       return notice(T.wifi_title, T.wifi_text, body.ip ? T.your_ip + body.ip : "");

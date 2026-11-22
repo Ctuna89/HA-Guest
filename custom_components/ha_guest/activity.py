@@ -67,6 +67,7 @@ class GuestRuntime:
         self._listeners: list[Callable[[], None]] = []
         self._expire: CALLBACK_TYPE | None = None
         self.invitations: Any = None  # invitations.Invitations, set up with the entry
+        self._hits: dict[str, list[float]] = {}
 
     @property
     def _safety(self) -> dict[str, Any]:
@@ -95,6 +96,20 @@ class GuestRuntime:
             state.state == STATE_HOME and state.attributes.get("user_id") not in restricted
             for state in self.hass.states.async_all("person")
         )
+
+    @callback
+    def allow(self, key: str, per_minute: int) -> bool:
+        """A simple sliding-window rate limit: False once «key» has been used per_minute times in the last minute."""
+        now = time.monotonic()
+        hits = [t for t in self._hits.get(key, []) if now - t < 60]
+        if len(hits) >= per_minute:
+            self._hits[key] = hits
+            return False
+        hits.append(now)
+        self._hits[key] = hits
+        if len(self._hits) > 1000:  # forget idle keys
+            self._hits = {k: v for k, v in self._hits.items() if v and now - v[-1] < 60}
+        return True
 
     # --- «in use» ------------------------------------------------------------------------------------------
 

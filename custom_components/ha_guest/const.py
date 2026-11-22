@@ -26,6 +26,7 @@ CONF_WELCOME = "welcome"
 CONF_SHOW_ICONS = "show_icons"
 CONF_LAYOUT = "layout"
 CONF_BACKGROUND = "background"
+CONF_EXPIRED_MESSAGE = "expired_message"
 DEFAULT_THEME = "default"
 
 CONF_SAFETY = "safety"

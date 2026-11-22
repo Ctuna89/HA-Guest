@@ -19,6 +19,7 @@ from .const import (
     CONF_APPEARANCE,
     CONF_AWAY_READ,
     CONF_BACKGROUND,
+    CONF_EXPIRED_MESSAGE,
     CONF_CONDITION_ENTITY,
     CONF_CONDITION_STATES,
     CONF_ENABLED,
@@ -117,7 +118,7 @@ USER_SCHEMA = vol.Schema({
 
 HOME_STATE_SCHEMA = vol.Schema({vol.Required(CONF_CONDITION_STATES): TEXT_LIST})
 
-BUTTONS = ["open", "close", "stop", "lock", "unlock", "activate", "play_pause", "start", "dock"]
+BUTTONS = ["open", "close", "stop", "lock", "unlock", "unlatch", "activate", "play_pause", "start", "dock"]
 
 # What the owner writes under «Layout», in the style of a dashboard's entities card.
 LAYOUT_SCHEMA = vol.Schema([{
@@ -263,6 +264,7 @@ class GuestOptionsFlow(OptionsFlow):
             vol.Optional(CONF_ACCENT): selector.TextSelector(),
             vol.Optional(CONF_WELCOME): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
             vol.Optional(CONF_BACKGROUND): selector.TextSelector(),
+            vol.Optional(CONF_EXPIRED_MESSAGE): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
             vol.Required(CONF_SHOW_ICONS, default=True): selector.BooleanSelector(),
             vol.Optional(CONF_LAYOUT): selector.ObjectSelector(),
         })

@@ -252,7 +252,7 @@ async def test_expiring_links(hass, hass_client_no_auth, hass_ws_client, freezer
 
     # On the right network, but without a link from the household.
     res = await http.get("/api/ha_guest/states")
-    assert res.status == 403 and (await res.json()) == {"error": "link"}
+    assert res.status == 403 and (await res.json()) == {"error": "link", "message": ""}
     assert (await http.get("/api/ha_guest/states", headers={"X-Guest-Token": "9999999999.abc"})).status == 403
 
     invite = (await _invite(ws))["result"]
@@ -937,3 +937,59 @@ async def test_home_screen_manifest(hass, hass_client_no_auth):
     # Anything that is not token-shaped is not echoed into the start address.
     manifest = await (await http.get("/api/ha_guest/manifest.json?t=a%20b%26x%3D1")).json()
     assert manifest["start_url"] == "/guest"
+
+
+
+async def test_page_security_headers(hass, hass_client_no_auth):
+    await _setup(hass)
+    http = await hass_client_no_auth()
+    res = await http.get("/guest")
+    html = await res.text()
+    policy = res.headers["Content-Security-Policy"]
+    nonce = policy.split("'nonce-")[1].split("'")[0]
+    assert f'<script nonce="{nonce}">' in html and f'<style nonce="{nonce}">' in html
+    assert "unsafe-inline" not in policy and "frame-ancestors 'none'" in policy and "connect-src 'self'" in policy
+    assert res.headers["X-Content-Type-Options"] == "nosniff" and res.headers["Referrer-Policy"] == "no-referrer"
+    # A new nonce on every load.
+    assert (await http.get("/guest")).headers["Content-Security-Policy"] != policy
+    res = await http.get("/api/ha_guest/states")
+    assert res.headers["X-Content-Type-Options"] == "nosniff" and res.headers["Cache-Control"] == "no-store"
+
+
+async def test_action_rate_limit(hass, hass_client_no_auth):
+    await _setup(hass)
+    http = await hass_client_no_auth()
+    body = {"entity_id": LIVING, "action": "toggle"}
+    statuses = [(await http.post("/api/ha_guest/action", json=body)).status for _ in range(32)]
+    assert statuses[:30] == [200] * 30 and statuses[30:] == [429, 429]
+
+
+async def test_expired_link_message(hass, hass_client_no_auth):
+    await _setup(hass, panel={"link_hours": 1})
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    options = {**entry.options, "appearance": {"expired_message": "Text me on 555-0100"}}
+    hass.config_entries.async_update_entry(entry, options=options)
+    await hass.async_block_till_done()
+    http = await hass_client_no_auth()
+    res = await http.get("/api/ha_guest/states", headers={"X-Guest-Token": "1.bad"})
+    assert await res.json() == {"error": "link", "message": "Text me on 555-0100"}
+
+
+async def test_fan_speed_and_lock_unlatch(hass, hass_client_no_auth):
+    fan_calls = async_mock_service(hass, "fan", "set_percentage")
+    open_calls = async_mock_service(hass, "lock", "open")
+    hass.states.async_set("fan.ceiling", "on", {"percentage": 50, "percentage_step": 25})
+    hass.states.async_set("lock.gate", "locked", {"supported_features": 1})
+    hass.states.async_set("lock.door", "locked", {"supported_features": 0})
+    await _setup(hass, panel={"entities": ["fan.ceiling", "lock.gate", "lock.door"]})
+    http = await hass_client_no_auth()
+
+    async def act(entity_id, action, value=None):
+        return (await http.post("/api/ha_guest/action", json={"entity_id": entity_id, "action": action, "value": value})).status
+
+    assert await act("fan.ceiling", "percentage", 75) == 200
+    assert fan_calls[-1].data == {"entity_id": "fan.ceiling", "percentage": 75}
+    assert await act("fan.ceiling", "percentage", 150) == 400
+    assert await act("lock.gate", "open") == 200 and open_calls[-1].data == {"entity_id": "lock.gate"}
+    assert await act("lock.door", "open") == 400  # this lock cannot unlatch
+    assert len(open_calls) == 1
