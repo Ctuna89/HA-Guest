@@ -48,7 +48,7 @@ def language(hass: HomeAssistant) -> str:
 def describe(lang: str, data: dict[str, Any]) -> tuple[str, str]:
     """(who, what) for an «ha_guest_event», e.g. ("Guest (192.168.1.20)", "turned off Living room lights")."""
     text = TEXT[lang]
-    who = f"{text['guest']} ({data.get('ip') or '?'})"
+    who = f"{data.get('code') or text['guest']} ({data.get('ip') or '?'})"
     kind = data.get("type")
     if kind == "action":
         template = ACTIONS[lang].get(data.get("action"), text["used"])

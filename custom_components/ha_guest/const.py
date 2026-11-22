@@ -38,6 +38,16 @@ NOTIFY_EVENTS = ["open", "action", "blocked"]
 DEFAULT_NOTIFY_ON = ["open", "blocked"]
 EVENT_GUEST = "ha_guest_event"
 
+# Permanent QR codes: {ref: {name, key, entities, days}}. «key» is the secret printed in the QR code; «ref» is a
+# public id carried by the sessions it starts, so deleting or replacing a code ends them.
+CONF_CODES = "codes"
+CONF_CODE = "code"
+CONF_NAME = "name"
+CONF_KEY = "key"
+CONF_DAYS = "days"
+CONF_NEW_QR = "new_qr"
+DEFAULT_CODE_DAYS = 3
+
 CONF_USERS = "users"
 CONF_USER = "user"
 CONF_ALWAYS_ENTITIES = "always_entities"
@@ -52,6 +62,7 @@ DEFAULT_TITLE = "Guests"
 PANEL_URL = "/guest"
 API_STATES_URL = "/api/ha_guest/states"
 API_ACTION_URL = "/api/ha_guest/action"
+API_REDEEM_URL = "/api/ha_guest/redeem"
 TOKEN_HEADER = "X-Guest-Token"
 INVITE_PANEL_PATH = "guest-qr"
 STATIC_URL = "/ha_guest_static/invite-panel.js"

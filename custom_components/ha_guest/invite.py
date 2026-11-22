@@ -24,6 +24,11 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 
 from .const import (
+    CONF_CODES,
+    CONF_DAYS,
+    CONF_KEY,
+    CONF_NAME,
+    DEFAULT_CODE_DAYS,
     CONF_ENABLED,
     CONF_LINK_HOURS,
     CONF_PANEL,
@@ -45,8 +50,63 @@ def link_seconds(panel: dict[str, Any]) -> int:
     return int(float(panel.get(CONF_LINK_HOURS) or 0) * 3600)
 
 
-def _sign(secret: str, expires: int) -> str:
-    return hmac.new(secret.encode(), str(expires).encode(), hashlib.sha256).hexdigest()[:32]
+def _sign(secret: str, expires: int, ref: str | None = None) -> str:
+    message = str(expires) if ref is None else f"{expires}.{ref}"
+    return hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def new_code() -> tuple[str, str]:
+    """(public ref, secret key) for a permanent QR code."""
+    return secrets.token_hex(4), secrets.token_urlsafe(16)
+
+
+def find_code(codes: dict[str, dict[str, Any]], key: Any) -> str | None:
+    """The ref of the permanent code whose secret key this is."""
+    if not isinstance(key, str) or not key:
+        return None
+    found = None
+    for ref, code in codes.items():
+        # Compare against every code, so the time taken says nothing about which one nearly matched.
+        if hmac.compare_digest(key.encode(), str(code.get(CONF_KEY, "")).encode()):
+            found = ref
+    return found
+
+
+def code_seconds(code: dict[str, Any]) -> int:
+    return int(float(code.get(CONF_DAYS) or DEFAULT_CODE_DAYS) * 86400)
+
+
+def create_session(secret: str, ref: str, lifetime: int, now: float | None = None) -> tuple[str, int]:
+    """A token for one phone that scanned a permanent code: «expires.ref.signature»."""
+    expires = int(now if now is not None else time.time()) + lifetime
+    return f"{expires}.{ref}.{_sign(secret, expires, ref)}", expires
+
+
+def check_token(
+    secret: str, token: Any, link_lifetime: int, codes: dict[str, dict[str, Any]], now: float | None = None
+) -> tuple[int, str | None] | None:
+    """(expiry, code ref) of a valid link or code session; None if forged, expired or no longer allowed.
+
+    A plain link («expires.signature») is valid for at most the current link duration. A session from a permanent
+    code («expires.ref.signature») is valid for at most that code's days, and only while the code still exists.
+    """
+    if not isinstance(token, str) or not secret:
+        return None
+    parts = token.split(".")
+    if len(parts) == 2:
+        return (expires, None) if (expires := token_expiry(secret, token, link_lifetime, now)) else None
+    if len(parts) != 3:
+        return None
+    raw, ref, signature = parts
+    if ref not in codes or not raw.isascii() or not raw.isdigit() or len(raw) > 12:
+        return None
+    expires = int(raw)
+    now = now if now is not None else time.time()
+    if not now < expires <= now + code_seconds(codes[ref]):
+        return None
+    if not hmac.compare_digest(signature, _sign(secret, expires, ref)):
+        return None
+    return expires, ref
 
 
 def create_token(secret: str, lifetime: int, now: float | None = None) -> tuple[str, int]:
@@ -56,7 +116,7 @@ def create_token(secret: str, lifetime: int, now: float | None = None) -> tuple[
 
 def token_expiry(secret: str, token: Any, lifetime: int, now: float | None = None) -> int | None:
     """When a valid token expires; None if it is forged, expired, or outlives the current link duration."""
-    if not isinstance(token, str) or not secret:
+    if not isinstance(token, str) or not secret or lifetime <= 0:
         return None
     raw, _, signature = token.partition(".")
     if not raw.isascii() or not raw.isdigit() or len(raw) > 12:
@@ -103,8 +163,21 @@ def ws_invite(hass: HomeAssistant, connection: websocket_api.ActiveConnection, m
     if lifetime := link_seconds(panel):
         token, expires = create_token(entry.data[CONF_SECRET], lifetime)
         url = f"{url}?t={token}"
-    svg = segno.make(url, error="m").svg_inline(scale=8, border=3, dark="#000", light="#fff")
-    connection.send_result(msg["id"], {"url": url, "expires": expires, "svg": svg})
+    base = f"{_base_url(hass).rstrip('/')}{PANEL_URL}"
+    codes = [
+        {
+            "ref": ref, "name": code.get(CONF_NAME) or ref, "days": float(code.get(CONF_DAYS) or DEFAULT_CODE_DAYS),
+            "url": (code_url := f"{base}?k={code[CONF_KEY]}"), "svg": _qr(code_url),
+        }
+        for ref, code in entry.options.get(CONF_CODES, {}).items()
+        if code.get(CONF_KEY)
+    ]
+    connection.send_result(msg["id"], {"url": url, "expires": expires, "svg": _qr(url), "codes": codes})
+
+
+def _qr(url: str) -> str:
+    # No fixed size, only a viewBox, so the page can draw it at any size (a thumbnail, a printed sheet).
+    return segno.make(url, error="m").svg_inline(scale=8, border=3, dark="#000", light="#fff", omitsize=True)
 
 
 async def async_setup_invites(hass: HomeAssistant) -> None:

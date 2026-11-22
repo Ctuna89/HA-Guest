@@ -10,6 +10,8 @@ const TEXT = {
     disabled: "The guest panel is switched off.",
     unauthorized: "Your user cannot create guest codes. Ask someone from the household to create one.",
     error: "Could not create the code.",
+    codes: "Permanent QR codes", days: "Each phone can use it for {n} days after scanning.", print: "Print",
+    print_text: "Scan with your phone's camera while connected to the Wi‑Fi.",
   },
   es: {
     title: "QR de invitados", scan: "El invitado escanea este código conectado al WiFi de la casa.",
@@ -21,6 +23,8 @@ const TEXT = {
     disabled: "El panel de invitados está desactivado.",
     unauthorized: "Tu usuario no puede crear códigos de invitado. Pídele uno a alguien de la casa.",
     error: "No se pudo crear el código.",
+    codes: "QR fijos", days: "Cada teléfono puede usarlo {n} días después de escanearlo.", print: "Imprimir",
+    print_text: "Escanéalo con la cámara del teléfono, conectado al WiFi.",
   },
 };
 
@@ -76,6 +80,16 @@ class HaGuestInvitePanel extends HTMLElement {
         button:focus-visible, input:focus-visible { outline: 3px solid var(--primary-color); outline-offset: 2px; }
         .note { font-size: 14px; margin-top: 4px; }
         [hidden] { display: none !important; }
+        .codes { margin-top: 40px; text-align: left; }
+        .codes h2 { font-size: 16px; margin: 0 0 12px; }
+        .code { display: flex; gap: 16px; align-items: center; padding: 12px; margin-bottom: 12px; border-radius: 16px;
+          background: var(--card-background-color); border: 1px solid var(--divider-color); }
+        .code .mini { flex: none; width: 88px; background: #fff; border-radius: 8px; padding: 4px; }
+        .code .mini svg { display: block; width: 100%; height: auto; }
+        .code .info { flex: 1; min-width: 0; }
+        .code strong { display: block; color: var(--primary-text-color); }
+        .code p { margin: 4px 0 8px; font-size: 13px; }
+        .code button { flex: none; min-height: 40px; padding: 0 16px; }
       </style>
       <header><ha-menu-button></ha-menu-button><span class="title"></span></header>
       <main>
@@ -93,6 +107,7 @@ class HaGuestInvitePanel extends HTMLElement {
           <p class="note"></p>
         </div>
         <p class="failed when" hidden></p>
+        <section class="codes" hidden><h2></h2><div class="list"></div></section>
       </main>`;
     const $ = (selector) => this.shadowRoot.querySelector(selector);
     $(".title").textContent = t.title;
@@ -157,6 +172,7 @@ class HaGuestInvitePanel extends HTMLElement {
       $(".again").hidden = $(".note").hidden = !invite.expires;
       $(".ready").hidden = false;
       $(".failed").hidden = true;
+      this._showCodes(invite.codes || []);
     } catch (err) {
       $(".ready").hidden = true;
       $(".failed").hidden = false;
@@ -164,5 +180,47 @@ class HaGuestInvitePanel extends HTMLElement {
     }
   }
 }
+
+HaGuestInvitePanel.prototype._showCodes = function (codes) {
+  const t = this._t;
+  const $ = (selector) => this.shadowRoot.querySelector(selector);
+  $(".codes").hidden = !codes.length;
+  $(".codes h2").textContent = t.codes;
+  const list = $(".codes .list");
+  list.replaceChildren();
+  for (const code of codes) {
+    const row = document.createElement("div");
+    row.className = "code";
+    const mini = document.createElement("div");
+    mini.className = "mini";
+    mini.innerHTML = code.svg; // produced by this integration's backend
+    const info = document.createElement("div");
+    info.className = "info";
+    const name = document.createElement("strong");
+    name.textContent = code.name;
+    const days = document.createElement("p");
+    days.textContent = t.days.replace("{n}", code.days);
+    info.append(name, days);
+    const print = document.createElement("button");
+    print.className = "plain";
+    print.textContent = t.print;
+    print.addEventListener("click", () => this._print(code));
+    row.append(mini, info, print);
+    list.append(row);
+  }
+};
+
+// A clean sheet with just the code, its name and how to use it, opened in a new tab and sent to the printer.
+HaGuestInvitePanel.prototype._print = function (code) {
+  const escape = (text) => String(text).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escape(code.name)}</title>
+    <style>body{font-family:system-ui,sans-serif;text-align:center;margin:48px}svg{width:70mm;height:auto}
+    h1{font-size:28px;margin:24px 0 8px}p{font-size:16px;color:#444}</style></head>
+    <body>${code.svg}<h1>${escape(code.name)}</h1><p>${escape(this._t.print_text)}</p>
+    <script>window.onload = () => window.print();<\/script></body></html>`;
+  const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  window.open(url, "_blank");
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+};
 
 customElements.define("ha-guest-invite-panel", HaGuestInvitePanel);

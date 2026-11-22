@@ -22,7 +22,14 @@ from .const import (
     CONF_CONDITION_ENTITY,
     CONF_CONDITION_STATES,
     CONF_ENABLED,
+    CONF_CODE,
+    CONF_CODES,
     CONF_DASHBOARD,
+    CONF_DAYS,
+    CONF_KEY,
+    CONF_NAME,
+    CONF_NEW_QR,
+    DEFAULT_CODE_DAYS,
     CONF_ENTITIES,
     CONF_FAMILY_LOCATION,
     CONF_HOME_ENTITIES,
@@ -56,7 +63,7 @@ from .const import (
 )
 from .dashboard import async_dashboard_plan, dashboard_options
 from .panel import background_url
-from .invite import new_secret
+from .invite import new_code, new_secret
 
 ENTITIES = selector.EntitySelector(selector.EntitySelectorConfig(multiple=True))
 TEXT_LIST = selector.TextSelector(selector.TextSelectorConfig(multiple=True))
@@ -194,7 +201,7 @@ class GuestOptionsFlow(OptionsFlow):
         }
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        options = ["panel", "appearance", "safety", "add_user"]
+        options = ["panel", "appearance", "safety", "codes", "add_user"]
         if self._users:
             options += ["edit_user", "remove_user"]
         if self.config_entry.options.get(CONF_PANEL, {}).get(CONF_LINK_HOURS):
@@ -292,6 +299,76 @@ class GuestOptionsFlow(OptionsFlow):
             step_id="safety", errors=errors,
             data_schema=self.add_suggested_values_to_schema(schema, current),
         )
+
+    @property
+    def _codes(self) -> dict[str, dict[str, Any]]:
+        return self.config_entry.options.get(CONF_CODES, {})
+
+    async def async_step_codes(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        options = ["add_code"]
+        if self._codes:
+            options += ["edit_code", "remove_code"]
+        return self.async_show_menu(step_id="codes", menu_options=options)
+
+    async def async_step_add_code(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        self._code_ref = None
+        return await self.async_step_code_settings()
+
+    async def async_step_edit_code(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        if user_input is not None:
+            self._code_ref = user_input[CONF_CODE]
+            return await self.async_step_code_settings()
+        return self.async_show_form(step_id="edit_code", data_schema=self._code_choice(multiple=False))
+
+    async def async_step_code_settings(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """A permanent QR code: its name, the entities it allows, and how long each phone's session lasts."""
+        ref = getattr(self, "_code_ref", None)
+        current = self._codes.get(ref, {}) if ref else {}
+        if user_input is not None:
+            code = {
+                CONF_NAME: user_input[CONF_NAME].strip(),
+                CONF_ENTITIES: user_input.get(CONF_ENTITIES, []),
+                CONF_DAYS: float(user_input[CONF_DAYS]),
+                CONF_KEY: current.get(CONF_KEY),
+            }
+            codes = dict(self._codes)
+            if ref is None or user_input.get(CONF_NEW_QR) or not code[CONF_KEY]:
+                # A new ref as well as a new key: sessions started from the old printout end too.
+                codes.pop(ref, None)
+                ref, code[CONF_KEY] = new_code()
+            codes[ref] = code
+            return self._save(**{CONF_CODES: codes})
+        schema = {
+            vol.Required(CONF_NAME): selector.TextSelector(),
+            vol.Optional(CONF_ENTITIES, default=[]): ENTITIES,
+            vol.Required(CONF_DAYS, default=DEFAULT_CODE_DAYS): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0.5, max=365, step=0.5, unit_of_measurement="d", mode=selector.NumberSelectorMode.BOX
+                )
+            ),
+        }
+        if ref is not None:
+            schema[vol.Required(CONF_NEW_QR, default=False)] = selector.BooleanSelector()
+        return self.async_show_form(
+            step_id="code_settings",
+            data_schema=self.add_suggested_values_to_schema(vol.Schema(schema), current),
+        )
+
+    async def async_step_remove_code(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        if user_input is not None:
+            removed = set(user_input[CONF_CODE])
+            return self._save(**{CONF_CODES: {k: v for k, v in self._codes.items() if k not in removed}})
+        return self.async_show_form(step_id="remove_code", data_schema=self._code_choice(multiple=True))
+
+    def _code_choice(self, multiple: bool) -> vol.Schema:
+        options = [
+            selector.SelectOptionDict(value=ref, label=code.get(CONF_NAME) or ref) for ref, code in self._codes.items()
+        ]
+        return vol.Schema({
+            vol.Required(CONF_CODE): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=options, multiple=multiple)
+            )
+        })
 
     async def async_step_revoke_links(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Replace the signing secret, which makes every link handed out so far stop working."""
