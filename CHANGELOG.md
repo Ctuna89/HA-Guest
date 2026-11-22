@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.9.1 — 2026-11-22
+
+- **Actions for automations:** `ha_guest.create_invitation` (returns the invitation's link and dates),
+  `ha_guest.extend_invitation` and `ha_guest.revoke_invitation`, for example to create an invitation from check-in
+  to check-out when a booking arrives and send its link to your phone.
+- **Invitations that start later:** an optional start time, from the **Guest QR** page or the action. Before it,
+  guests see when their access starts.
+- **Only while:** an invitation can work only while a schedule or input boolean helper is on, for example a cleaner
+  on Tuesdays from 9 to 13.
+- **Only one phone:** the first phone that opens an invitation's link keeps it; the same link forwarded elsewhere
+  is refused. **Free the phone** lets it be opened on a new one.
+- **QR code image entity** (`image.guest_panel_qr_code`) with a quick link that renews itself, for a dashboard on a
+  wall tablet by the door.
+- **The guest page speaks the guest's language:** Spanish, English, French, German, Italian, Portuguese or Dutch,
+  from their phone, and entity states use Home Assistant's words in that language.
+
+Thanks to @Darkdragon14, whose [Guest Mode](https://github.com/Darkdragon14/ha-guest-mode) inspired this release.
+
 ## 0.9.0 — 2026-11-22
 
 - **Named invitations** on the **Guest QR** page: a link for one guest with their name, how long it lasts (2 hours

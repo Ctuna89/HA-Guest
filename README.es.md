@@ -411,7 +411,7 @@ de tu red, vale la pena mirarlo.
 
 Gracias también a [@Darkdragon14](https://github.com/Darkdragon14) por
 [Guest Mode](https://github.com/Darkdragon14/ha-guest-mode), que inicia sesión en el propio Home Assistant con un
-enlace temporal. HA Guest 0.10.0 toma de ahí las acciones para automatizaciones, las invitaciones que empiezan más
+enlace temporal. HA Guest 0.9.1 toma de ahí las acciones para automatizaciones, las invitaciones que empiezan más
 tarde o que solo funcionan mientras un horario o ayudante está encendido, la entidad de imagen con el código QR y
 más idiomas.
 

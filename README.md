@@ -400,7 +400,7 @@ outside your home network, give it a look.
 
 Thanks also to [@Darkdragon14](https://github.com/Darkdragon14) for
 [Guest Mode](https://github.com/Darkdragon14/ha-guest-mode), which logs guests into Home Assistant itself with a
-temporary link. HA Guest 0.10.0 takes from it the actions for automations, invitations that start later or only
+temporary link. HA Guest 0.9.1 takes from it the actions for automations, invitations that start later or only
 work while a schedule or helper is on, the QR code image entity, and more languages.
 
 ## Development
