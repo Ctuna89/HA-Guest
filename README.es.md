@@ -205,8 +205,21 @@ vez de crear uno en cada visita: **Configurar → QR fijos → Crear**.
 Imprímelo desde la página **Guest QR** de la barra lateral: cada QR fijo tiene un botón **Imprimir** que abre una
 hoja con el código, su nombre y una instrucción de una línea.
 
-**Lo que se sacrifica:** el código impreso no vence nunca. Cualquiera que lo vea (o tenga una foto) y esté en tu
-red puede iniciar una sesión nueva. La duración de la sesión solo limita cuánto tiempo un teléfono conserva el
+#### Tags NFC
+
+Un QR fijo también puede ir en un tag NFC (un adhesivo o un disco pequeño, NTAG213 o superior), así el invitado solo
+acerca el teléfono. Los iPhone (XS o posterior) y la mayoría de los Android abren el enlace sin ninguna app, y desde
+ahí funciona exactamente igual que escanear el QR.
+
+- **Escribir tag NFC** en la página **Guest QR** lo escribe directamente. Los navegadores solo lo permiten en Chrome
+  para Android con Home Assistant abierto por https (por ejemplo tu dirección de Home Assistant Cloud); el tag igual
+  queda con la dirección local que usan los invitados en la casa.
+- En cualquier otro caso, **Copiar enlace** y escríbelo como registro de tipo *URL* con una app como NFC Tools.
+- **Bloquear el tag después** lo deja de solo lectura para que nadie lo sobrescriba con otro enlace. No se puede
+  deshacer: si después reemplazas el código, usa un tag nuevo.
+
+**Lo que se sacrifica:** el código impreso no vence nunca. Cualquiera que lo vea (o tenga una foto), o que acerque
+el teléfono al tag NFC, y esté en tu red puede iniciar una sesión nueva. La duración de la sesión solo limita cuánto tiempo un teléfono conserva el
 acceso sin tener el código enfrente. Limita sus entidades a esa pieza y combínalo con un WiFi de invitados o con
 «Solo si hay alguien de la casa». Para anularlo usa **Editar → Reemplazar este QR** (la hoja impresa y todas las
 sesiones iniciadas con ella dejan de funcionar) o elimina el código. Las reglas de red, dirección y pausa del panel

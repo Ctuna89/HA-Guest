@@ -11,6 +11,11 @@ const TEXT = {
     unauthorized: "Your user cannot create guest codes. Ask someone from the household to create one.",
     error: "Could not create the code.",
     codes: "Permanent QR codes", days: "Each phone can use it for {n} days after scanning.", print: "Print",
+    nfc: "Write NFC tag", nfc_lock: "Lock the tag afterwards (it can never be changed again)",
+    nfc_hold: "Hold the NFC tag against the back of this phone…", nfc_done: "Done: the tag opens this guest panel.",
+    nfc_locked: "Done, and the tag is locked.", nfc_failed: "Could not write the tag: {error}",
+    nfc_unsupported: "This browser cannot write NFC tags. It works in Chrome on Android with Home Assistant opened over https (for example your Home Assistant Cloud address). Otherwise copy the link and write it as a URL record with an app such as NFC Tools.",
+    copy_link: "Copy link",
     print_text: "Scan with your phone's camera while connected to the Wi‑Fi.",
   },
   es: {
@@ -24,6 +29,11 @@ const TEXT = {
     unauthorized: "Tu usuario no puede crear códigos de invitado. Pídele uno a alguien de la casa.",
     error: "No se pudo crear el código.",
     codes: "QR fijos", days: "Cada teléfono puede usarlo {n} días después de escanearlo.", print: "Imprimir",
+    nfc: "Escribir tag NFC", nfc_lock: "Bloquear el tag después (nunca más se podrá cambiar)",
+    nfc_hold: "Acerca el tag NFC a la parte de atrás de este teléfono…", nfc_done: "Listo: el tag abre este panel de invitados.",
+    nfc_locked: "Listo, y el tag quedó bloqueado.", nfc_failed: "No se pudo escribir el tag: {error}",
+    nfc_unsupported: "Este navegador no puede escribir tags NFC. Funciona en Chrome para Android con Home Assistant abierto por https (por ejemplo tu dirección de Home Assistant Cloud). Si no, copia el enlace y escríbelo como registro de tipo URL con una app como NFC Tools.",
+    copy_link: "Copiar enlace",
     print_text: "Escanéalo con la cámara del teléfono, conectado al WiFi.",
   },
 };
@@ -90,6 +100,13 @@ class HaGuestInvitePanel extends HTMLElement {
         .code strong { display: block; color: var(--primary-text-color); }
         .code p { margin: 4px 0 8px; font-size: 13px; }
         .code button { flex: none; min-height: 40px; padding: 0 16px; }
+        .code { flex-wrap: wrap; }
+        .code .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+        .code label { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; margin-top: 10px;
+          color: var(--secondary-text-color); }
+        .code label input { flex: none; width: 18px; height: 18px; margin: 0; padding: 0; }
+        .code .mini { align-self: flex-start; }
+        .code .nfc-status { margin: 8px 0 0; font-size: 13px; color: var(--primary-text-color); }
       </style>
       <header><ha-menu-button></ha-menu-button><span class="title"></span></header>
       <main>
@@ -200,14 +217,76 @@ HaGuestInvitePanel.prototype._showCodes = function (codes) {
     name.textContent = code.name;
     const days = document.createElement("p");
     days.textContent = t.days.replace("{n}", code.days);
-    info.append(name, days);
-    const print = document.createElement("button");
-    print.className = "plain";
-    print.textContent = t.print;
-    print.addEventListener("click", () => this._print(code));
-    row.append(mini, info, print);
+    const make = (text, onClick) => {
+      const b = document.createElement("button");
+      b.className = "plain";
+      b.textContent = text;
+      b.addEventListener("click", onClick);
+      return b;
+    };
+    const status = document.createElement("p");
+    status.className = "nfc-status";
+    status.setAttribute("role", "status");
+    status.hidden = true;
+    const show = (text) => { status.hidden = false; status.textContent = text; };
+    const lockLabel = document.createElement("label");
+    const lock = document.createElement("input");
+    lock.type = "checkbox";
+    lockLabel.append(lock, document.createTextNode(t.nfc_lock));
+    lockLabel.hidden = !("NDEFReader" in window && window.isSecureContext);
+    const buttons = document.createElement("div");
+    buttons.className = "buttons";
+    buttons.append(
+      make(t.print, () => this._print(code)),
+      make(t.nfc, () => this._writeNfc(code, lock.checked, show)),
+      make(t.copy_link, async () => show((await this._copyText(code.url)) ? t.copied : code.url)),
+    );
+    info.append(name, days, buttons, lockLabel, status);
+    row.append(mini, info);
     list.append(row);
   }
+};
+
+// An NFC tag holding the same address as the printed code: phones open it with a tap, no app needed. Writing needs
+// Web NFC (Chrome on Android, over https).
+HaGuestInvitePanel.prototype._writeNfc = async function (code, lock, show) {
+  const t = this._t;
+  if (!("NDEFReader" in window) || !window.isSecureContext) {
+    show(t.nfc_unsupported);
+    return;
+  }
+  try {
+    const ndef = new NDEFReader();
+    show(t.nfc_hold);
+    await ndef.write({ records: [{ recordType: "url", data: code.url }] });
+    if (lock) {
+      await ndef.makeReadOnly();
+      show(t.nfc_locked);
+    } else {
+      show(t.nfc_done);
+    }
+  } catch (err) {
+    show(t.nfc_failed.replace("{error}", err && err.message ? err.message : String(err)));
+  }
+};
+
+// Copies text; over plain http, where the clipboard API does not exist, through a temporary selected field.
+HaGuestInvitePanel.prototype._copyText = async function (text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (err) { /* fall through */ }
+  const field = document.createElement("textarea");
+  field.value = text;
+  field.setAttribute("readonly", "");
+  field.style.position = "fixed";
+  field.style.opacity = "0";
+  this.shadowRoot.append(field);
+  field.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+  field.remove();
+  return ok;
 };
 
 // A clean sheet with just the code, its name and how to use it, opened in a new tab and sent to the printer.

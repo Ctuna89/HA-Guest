@@ -202,8 +202,21 @@ visit: **Configure → Permanent QR codes → Add**.
 Print it from the **Guest QR** page in the sidebar: each permanent code has a **Print** button that opens a sheet
 with the code, its name and a one-line instruction.
 
-**What this trades away:** the printed code itself never expires. Anyone who can see it (or a photo of it) and is
-on your network can start a new session. The session length only limits how long a phone keeps access without
+#### NFC tags
+
+A permanent code can also go on an NFC tag (a sticker or a small disc, NTAG213 or larger), so guests just hold their
+phone to it. iPhones (XS and later) and most Android phones open the link without any app, and from there it works
+exactly like scanning the QR code.
+
+- **Write NFC tag** on the **Guest QR** page writes it directly. Browsers only allow this in Chrome on Android with
+  Home Assistant opened over https (for example your Home Assistant Cloud address); the tag still gets the local
+  address guests use at home.
+- Anywhere else, **Copy link** and write it as a *URL* record with an app such as NFC Tools.
+- **Lock the tag afterwards** makes it read-only so nobody can overwrite it with another link. It cannot be undone:
+  if you later replace the code, use a new tag.
+
+**What this trades away:** the printed code itself never expires. Anyone who can see it (or a photo of it), or
+who taps the NFC tag, and is on your network can start a new session. The session length only limits how long a phone keeps access without
 the code in front of it. Keep the allowed entities to that room, and combine it with a guest Wi-Fi or «Only while
 someone from the household is home». To revoke it, use **Edit → Replace this QR code** (the old printout and every
 session started with it stop working) or remove the code. Guest network, address and pause rules apply as usual.
