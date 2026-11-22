@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.0 — 2026-11-22
+
+- **Permanent QR codes** (*Configure → Permanent QR codes*): print one code for a room, such as the guest bedroom
+  nightstand. Each phone that scans it gets a session for the days you set, limited to the code's own entities and
+  logged under its name, and then scans the same code again. Print it from the **Guest QR** page. **Replace this
+  QR code** or removing it ends the old printout and every session started with it. The printed code itself never
+  expires: anyone who can see it and is on your network can use it, so keep it to that room's entities.
+- QR codes now scale to any size (thumbnails and printed sheets).
+- The README shows the repository ready to copy (`Ctuna89/HA-Guest`) and separate steps for the Marketplace and
+  for HACS.
+
 ## 0.7.0 — 2026-11-20
 
 The guest page now looks much closer to your dashboard.
