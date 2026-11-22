@@ -314,7 +314,7 @@ including on the entity's own history, and fired as an `ha_guest_event` event fo
 
 Every event also has `ip`, `link` (a short id of the guest's link, when links are required) and `link_expires`.
 
-The integration adds two entities on a «Guest panel» device:
+The integration adds three entities on a «Guest panel» device:
 
 - **`switch.guest_panel`**: pauses the panel without touching its settings. Use it from a dashboard or an
   automation (e.g. off when the alarm is armed); it keeps its state across restarts.

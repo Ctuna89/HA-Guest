@@ -322,7 +322,7 @@ automatizaciones:
 Todos los eventos llevan además `ip`, `link` (un identificador corto del enlace del invitado, cuando se exigen
 enlaces) y `link_expires`.
 
-La integración agrega dos entidades en un dispositivo «Panel de invitados»:
+La integración agrega tres entidades en un dispositivo «Panel de invitados»:
 
 - **`switch.guest_panel`**: pausa el panel sin tocar su configuración. Úsalo desde un panel o una automatización
   (p. ej. apagarlo al armar la alarma); conserva su estado al reiniciar.
