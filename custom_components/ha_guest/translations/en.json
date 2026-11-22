@@ -244,11 +244,93 @@
       "in_use": {
         "name": "In use"
       }
+    },
+    "image": {
+      "qr": {
+        "name": "QR code"
+      }
     }
   },
   "device": {
     "panel": {
       "name": "Guest panel"
+    }
+  },
+  "services": {
+    "create_invitation": {
+      "name": "Create guest invitation",
+      "description": "Creates a named invitation to the guest panel and returns its link, for example when a booking arrives.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "The guest's name, shown in the list and the logbook."
+        },
+        "entities": {
+          "name": "Entities",
+          "description": "Only these entities. Empty means the whole guest panel. They must be on the guest panel."
+        },
+        "starts": {
+          "name": "Starts",
+          "description": "When the invitation starts working, for example check-in. Empty means now."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "How long it lasts from its start. Default 1 day."
+        },
+        "ends": {
+          "name": "Ends",
+          "description": "When it stops working, for example check-out. Instead of a duration."
+        },
+        "condition_entity": {
+          "name": "Only while",
+          "description": "A schedule or input boolean helper: the invitation works only while it is on."
+        },
+        "single_device": {
+          "name": "Single phone",
+          "description": "The first phone that opens the link keeps it; forwarding the link does not work."
+        }
+      }
+    },
+    "extend_invitation": {
+      "name": "Extend guest invitation",
+      "description": "Adds time to an invitation without changing its link.",
+      "fields": {
+        "invitation": {
+          "name": "Invitation",
+          "description": "Its id (returned when it was created) or its name."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Time to add, from now if it already expired."
+        }
+      }
+    },
+    "revoke_invitation": {
+      "name": "Revoke guest invitation",
+      "description": "Ends an invitation at once.",
+      "fields": {
+        "invitation": {
+          "name": "Invitation",
+          "description": "Its id (returned when it was created) or its name."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "panel_off": {
+      "message": "The guest panel is switched off in HA Guest's settings."
+    },
+    "no_invitation": {
+      "message": "There is no invitation «{invitation}»."
+    },
+    "bad_period": {
+      "message": "The invitation must last more than zero and at most a year."
+    },
+    "not_allowed": {
+      "message": "Some entities are not on the guest panel."
+    },
+    "bad_condition": {
+      "message": "The condition must be a schedule or an input boolean."
     }
   }
 }

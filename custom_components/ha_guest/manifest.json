@@ -1,7 +1,7 @@
 {
   "domain": "ha_guest",
   "name": "HA Guest",
-  "after_dependencies": ["cloud"],
+  "after_dependencies": ["cloud", "image"],
   "codeowners": ["@Ctuna89"],
   "config_flow": true,
   "dependencies": ["frontend", "http", "websocket_api"],
@@ -11,5 +11,5 @@
   "issue_tracker": "https://github.com/Ctuna89/HA-Guest/issues",
   "requirements": ["segno==1.6.6"],
   "single_config_entry": true,
-  "version": "0.9.0"
+  "version": "0.9.1"
 }

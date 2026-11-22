@@ -21,11 +21,12 @@ from .activity import GuestRuntime
 from .invitations import async_get_invitations, async_setup_invitation_commands
 from .invite import async_setup_invites, async_show_invite_panel, new_secret
 from .panel import async_register_views
+from .services import async_setup_services
 from .permissions import GuestUserManager, async_release_users
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-PLATFORMS = [Platform.BINARY_SENSOR, Platform.SWITCH]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.IMAGE, Platform.SWITCH]
 
 type GuestConfigEntry = ConfigEntry[GuestRuntime]
 
@@ -35,6 +36,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     async_register_views(hass)
     await async_setup_invites(hass)
     async_setup_invitation_commands(hass)
+    async_setup_services(hass)
     return True
 
 

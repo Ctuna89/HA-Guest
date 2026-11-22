@@ -24,6 +24,9 @@ const TEXT = {
     revoke: "Revoke", revoke_confirm: "Revoke the invitation for {name}? Their link stops working now.",
     pick_one: "Choose at least one entity, or the whole panel.", no_name: "Write the guest's name.",
     n_entities: "{n} entities",
+    starts_label: "Starts (optional)", starts_at: "Starts {when}", always: "At any time", only_while: "Only while {name} is on",
+    single: "Only one phone (the first that opens the link keeps it)", phone_bound: "Opened on a phone",
+    phone_free: "One phone, not opened yet", release: "Free the phone", bad_condition: "That condition is not valid.",
     print_text: "Scan with your phone's camera while connected to the Wi‑Fi.",
   },
   es: {
@@ -50,6 +53,9 @@ const TEXT = {
     revoke: "Anular", revoke_confirm: "¿Anular la invitación de {name}? Su enlace deja de funcionar ahora.",
     pick_one: "Elige al menos una entidad, o todo el panel.", no_name: "Escribe el nombre del invitado.",
     n_entities: "{n} entidades",
+    starts_label: "Empieza (opcional)", starts_at: "Empieza {when}", always: "A cualquier hora", only_while: "Solo mientras {name} esté encendido",
+    single: "Solo un teléfono (el primero que abre el enlace se queda con él)", phone_bound: "Abierta en un teléfono",
+    phone_free: "Un solo teléfono, sin abrir todavía", release: "Liberar teléfono", bad_condition: "Esa condición no es válida.",
     print_text: "Escanéalo con la cámara del teléfono, conectado al WiFi.",
   },
 };
@@ -145,6 +151,12 @@ class HaGuestInvitePanel extends HTMLElement {
         .invite-item .buttons select { width: auto; padding: 8px; }
         .invite-item .qrbox { margin-top: 12px; text-align: center; }
         .invite-item .qrbox .qr { max-width: 260px; margin: 0 auto; }
+        .invites .field { display: grid; gap: 4px; font-size: 13px; color: var(--secondary-text-color); }
+        .invites input[type=datetime-local] { width: 100%; box-sizing: border-box; margin: 0; padding: 10px; border-radius: 10px;
+          font: inherit; font-size: 15px; text-align: left; color: var(--primary-text-color);
+          background: var(--primary-background-color); border: 1px solid var(--divider-color); }
+        .invites .check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; }
+        .invites .check input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; }
         .form-error { color: var(--error-color, #b00020); font-size: 13px; margin: 0; }
       </style>
       <header><ha-menu-button></ha-menu-button><span class="title"></span></header>
@@ -168,6 +180,9 @@ class HaGuestInvitePanel extends HTMLElement {
           <form novalidate>
             <input type="text" name="name" maxlength="60" autocomplete="off">
             <select name="hours"></select>
+            <label class="field"><span class="starts-label"></span><input type="datetime-local" name="starts"></label>
+            <select name="condition"></select>
+            <label class="check"><input type="checkbox" name="single"><span class="single-label"></span></label>
             <div class="scope">
               <label><input type="checkbox" name="whole" checked><span class="whole-label"></span></label>
               <div class="picks" hidden></div>
@@ -337,6 +352,8 @@ HaGuestInvitePanel.prototype._setUpInviteForm = function (section) {
   }
   form.hours.value = "24";
   section.querySelector(".whole-label").textContent = t.whole;
+  section.querySelector(".starts-label").textContent = t.starts_label;
+  section.querySelector(".single-label").textContent = t.single;
   form.whole.addEventListener("change", () => { section.querySelector(".picks").hidden = form.whole.checked; });
   section.querySelector("button[type=submit]").textContent = t.invite;
   form.addEventListener("submit", async (ev) => {
@@ -349,8 +366,15 @@ HaGuestInvitePanel.prototype._setUpInviteForm = function (section) {
     if (!form.whole.checked && !entities.length) { error.textContent = t.pick_one; return; }
     error.textContent = "";
     try {
-      const data = await this._hass.callWS({ type: "ha_guest/invitations/create", name, entities, hours: Number(form.hours.value) });
+      // A local date and time from the field, sent as a timestamp; empty means now.
+      const starts = form.starts.value ? Math.floor(new Date(form.starts.value).getTime() / 1000) : null;
+      const data = await this._hass.callWS({
+        type: "ha_guest/invitations/create", name, entities, hours: Number(form.hours.value),
+        starts, condition: form.condition.value || null, single_device: form.single.checked,
+      });
       form.name.value = "";
+      form.starts.value = "";
+      form.single.checked = false;
       this._openRef = data.invitations[0] && data.invitations[0].ref; // show the new one's QR straight away
       this._showInvitations(data);
     } catch (err) {
@@ -375,6 +399,17 @@ HaGuestInvitePanel.prototype._showInvitations = function (data) {
     return label;
   }));
 
+  const select = section.querySelector("select[name=condition]");
+  const current = select.value;
+  select.replaceChildren(...[{ entity_id: "", name: t.always }, ...data.conditions].map((c) => {
+    const option = document.createElement("option");
+    option.value = c.entity_id;
+    option.textContent = c.entity_id ? t.only_while.replace("{name}", c.name) : c.name;
+    return option;
+  }));
+  select.value = current;
+  select.hidden = !data.conditions.length;
+
   const list = section.querySelector(".list");
   list.replaceChildren();
   for (const item of data.invitations) {
@@ -389,8 +424,11 @@ HaGuestInvitePanel.prototype._showInvitations = function (data) {
       : t.whole;
     card.append(
       title,
+      ...(item.starts && item.starts > data.now ? [line(t.starts_at.replace("{when}", this._when(item.starts)))] : []),
       line((expired ? t.expired_at : t.expires_at).replace("{when}", this._when(item.expires))),
       line(scope),
+      ...(item.condition ? [line(t.only_while.replace("{name}", item.condition_name || item.condition))] : []),
+      ...(item.single_device ? [line(item.device ? t.phone_bound : t.phone_free)] : []),
       line([item.last_used ? t.used_at.replace("{when}", this._when(item.last_used)) : t.never_used,
         item.created_by ? t.by.replace("{who}", item.created_by) : ""].filter(Boolean).join(" · ")),
     );
@@ -444,6 +482,8 @@ HaGuestInvitePanel.prototype._showInvitations = function (data) {
       by,
       button(t.extend, async () => this._showInvitations(
         await this._hass.callWS({ type: "ha_guest/invitations/extend", ref: item.ref, hours: Number(by.value) }))),
+      ...(item.single_device && item.device ? [button(t.release, async () => this._showInvitations(
+        await this._hass.callWS({ type: "ha_guest/invitations/release", ref: item.ref })))] : []),
       button(t.revoke, async () => {
         if (!confirm(t.revoke_confirm.replace("{name}", item.name))) return;
         this._showInvitations(await this._hass.callWS({ type: "ha_guest/invitations/revoke", ref: item.ref }));

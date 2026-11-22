@@ -42,6 +42,7 @@ from .const import (
     DEFAULT_THEME,
     API_ACTION_URL,
     API_MANIFEST_URL,
+    API_CLAIM_URL,
     API_REDEEM_URL,
     API_STREAM_URL,
     ICON_URL,
@@ -297,12 +298,17 @@ def background_url(value: Any) -> str | None:
     return value if SAFE_URL.match(value) else None
 
 
-async def async_state_labels(hass: HomeAssistant, states: list[State]) -> dict[str, str]:
-    """Each state in Home Assistant's own words and language («Inactivo», «Despejado, de noche»...)."""
+LANGUAGE_SHAPE = re.compile(r"^[a-z]{2}(-[A-Za-z]{2,4})?$")
+
+
+async def async_state_labels(hass: HomeAssistant, states: list[State], language: str | None = None) -> dict[str, str]:
+    """Each state in Home Assistant's own words («Inactivo», «Despejado, de noche»...), in the guest's language
+    when Home Assistant has it, else in Home Assistant's own."""
     registry = er.async_get(hass)
     domains = {state.domain for state in states}
     platforms = {entry.platform for state in states if (entry := registry.async_get(state.entity_id))}
-    language = hass.config.language or "en"
+    if not language or not LANGUAGE_SHAPE.match(language):
+        language = hass.config.language or "en"
     component = await async_get_translations(hass, language, "entity_component", domains)
     entity = await async_get_translations(hass, language, "entity", platforms) if platforms else {}
     labels = {}
@@ -381,7 +387,7 @@ async def async_allowed_entities(hass: HomeAssistant, conf: dict[str, Any], gues
 
 
 async def async_build_sections(
-    hass: HomeAssistant, conf: dict[str, Any], guest: Guest | None = None
+    hass: HomeAssistant, conf: dict[str, Any], guest: Guest | None = None, language: str | None = None
 ) -> list[dict[str, Any]]:
     """The page content: the chosen dashboard, the owner's layout, or the allowed entities grouped by area."""
     appearance = conf.get(CONF_APPEARANCE, {})
@@ -417,7 +423,7 @@ async def async_build_sections(
         plan = [*plan, *extra.items()]
 
     states = [s for _, items in plan for item in items if (s := hass.states.get(item.get("entity") or ""))]
-    labels = await async_state_labels(hass, states)
+    labels = await async_state_labels(hass, states, language)
     sections = []
     for title, items in plan:
         entities = []
@@ -460,6 +466,14 @@ async def async_background(hass: HomeAssistant, conf: dict[str, Any]) -> str | N
 
 class _GuestView(HomeAssistantView):
     requires_auth = False
+
+    def _invitation_refusal(self, hass: HomeAssistant, item: dict[str, Any]) -> web.Response | None:
+        """An invitation that has not started yet, or whose own condition (a schedule, a helper) is not on."""
+        if (starts := item.get("starts")) and time.time() < starts:
+            return self.json({"error": "not_yet", "starts": starts}, HTTPStatus.FORBIDDEN)
+        if (entity_id := item.get("condition")) and not is_on(hass.states.get(entity_id)):
+            return self.json({"error": "schedule"}, HTTPStatus.FORBIDDEN)
+        return None
 
     @staticmethod
     def _link_error(conf: dict[str, Any]) -> dict[str, Any]:
@@ -508,8 +522,13 @@ class _GuestView(HomeAssistantView):
                 code = codes[ref]
                 scope = tuple(code.get(CONF_ENTITIES) or ()) or None
                 guest = Guest(ip=guest.ip, link=link, expires=expires, code=code.get(CONF_NAME), scope=scope)
-            elif kind == "invite":
+            elif kind in ("invite", "device"):
                 item = invitations[ref]
+                if kind == "invite" and item.get("single_device"):
+                    # The shared link of a single-phone invitation only lets the first phone claim it.
+                    return self.json({"error": "claimed" if item.get("device") else "claim"}, HTTPStatus.FORBIDDEN)
+                if (refused := self._invitation_refusal(hass, item)) is not None:
+                    return refused
                 scope = tuple(item.get("entities") or ()) or None
                 guest = Guest(ip=guest.ip, link=link, expires=expires, code=item["name"], scope=scope, invite=ref)
         elif lifetime:
@@ -580,7 +599,7 @@ class GuestStatesView(_GuestView):
                 "accent": appearance.get(CONF_ACCENT) or None,
                 "welcome": appearance.get(CONF_WELCOME) or "",
             },
-            "sections": await async_build_sections(hass, conf, guest),
+            "sections": await async_build_sections(hass, conf, guest, request.query.get("lang")),
         })
 
 
@@ -630,6 +649,39 @@ class GuestActionView(_GuestView):
             return self.json({"error": "failed"}, HTTPStatus.BAD_REQUEST)
         runtime.async_action_done(guest, state, action, value)
         return self.json({"ok": True})
+
+
+def is_on(state: State | None) -> bool:
+    return state is not None and state.state == "on"
+
+
+CLAIMS_PER_MINUTE = 10
+
+
+class GuestClaimView(_GuestView):
+    """The first phone to open a single-phone invitation's link binds it; it gets its own token for that."""
+
+    url = API_CLAIM_URL
+    name = "api:ha_guest:claim"
+
+    async def post(self, request: web.Request) -> web.Response:
+        place = self._place(request)
+        if isinstance(place, web.Response):
+            return place
+        _, conf, runtime = place
+        if not runtime.allow(f"claim:{request.remote}", CLAIMS_PER_MINUTE):
+            return self.json({"error": "rate"}, HTTPStatus.TOO_MANY_REQUESTS)
+        if request.content_type != "application/json":
+            return self.json({"error": "invalid"}, HTTPStatus.BAD_REQUEST)
+        token = request.headers.get(TOKEN_HEADER)
+        invitations = runtime.invitations.items if runtime.invitations is not None else {}
+        checked = check_token(conf[CONF_SECRET], token, link_seconds(conf), {}, invitations) if token else None
+        if checked is None or checked[1] != "invite" or not invitations[checked[2]].get("single_device"):
+            return self.json(self._link_error(conf), HTTPStatus.FORBIDDEN)
+        ref = checked[2]
+        if (key := runtime.invitations.claim(ref)) is None:
+            return self.json({"error": "claimed"}, HTTPStatus.FORBIDDEN)
+        return self.json({"token": f"d.{ref}.{key}"})
 
 
 class GuestRedeemView(_GuestView):
@@ -744,5 +796,6 @@ def async_register_views(hass: HomeAssistant) -> None:
     hass.http.register_view(GuestStatesView())
     hass.http.register_view(GuestActionView())
     hass.http.register_view(GuestRedeemView())
+    hass.http.register_view(GuestClaimView())
     hass.http.register_view(GuestStreamView())
     hass.http.register_view(GuestManifestView())
