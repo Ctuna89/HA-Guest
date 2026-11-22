@@ -36,6 +36,9 @@ from .const import (
     CONF_WELCOME,
     DEFAULT_THEME,
     API_ACTION_URL,
+    API_REDEEM_URL,
+    CONF_CODES,
+    CONF_NAME,
     API_STATES_URL,
     CONF_ENABLED,
     CONF_ENTITIES,
@@ -54,7 +57,7 @@ from .const import (
 from .activity import Guest, GuestRuntime
 from .dashboard import Plan, async_dashboard_config, async_dashboard_plan, background_from_config
 from .icons import async_icon_path
-from .invite import link_seconds, token_expiry
+from .invite import check_token, code_seconds, create_session, find_code, link_seconds
 
 ATTRIBUTES = (
     "brightness", "supported_color_modes", "color_temp_kelvin", "min_color_temp_kelvin", "max_color_temp_kelvin",
@@ -184,6 +187,7 @@ def panel_config(hass: HomeAssistant) -> tuple[GuestRuntime, dict[str, Any]] | N
                 **conf,
                 CONF_SECRET: entry.data.get(CONF_SECRET, ""),
                 CONF_APPEARANCE: entry.options.get(CONF_APPEARANCE, {}),
+                CONF_CODES: entry.options.get(CONF_CODES, {}),
             }
     return None
 
@@ -335,18 +339,23 @@ async def async_dashboard_or_none(hass: HomeAssistant, conf: dict[str, Any]) -> 
     return await async_dashboard_plan(hass, conf.get(CONF_DASHBOARD)) or []
 
 
-async def async_allowed_entities(hass: HomeAssistant, conf: dict[str, Any]) -> list[str]:
+async def async_allowed_entities(hass: HomeAssistant, conf: dict[str, Any], guest: Guest | None = None) -> list[str]:
     """What guests may use: the panel's entity list, or every entity the chosen dashboard shows.
 
-    A dashboard that is missing or cannot be read allows nothing.
+    A guest who scanned a permanent code that names its own entities may use only those. A dashboard that is
+    missing or cannot be read allows nothing.
     """
+    if guest is not None and guest.scope is not None:
+        return list(guest.scope)
     plan = await async_dashboard_or_none(hass, conf)
     if plan is None:
         return conf.get(CONF_ENTITIES, [])
     return [item["entity"] for _, items in plan for item in items]
 
 
-async def async_build_sections(hass: HomeAssistant, conf: dict[str, Any]) -> list[dict[str, Any]]:
+async def async_build_sections(
+    hass: HomeAssistant, conf: dict[str, Any], guest: Guest | None = None
+) -> list[dict[str, Any]]:
     """The page content: the chosen dashboard, the owner's layout, or the allowed entities grouped by area."""
     appearance = conf.get(CONF_APPEARANCE, {})
     show_icons = appearance.get(CONF_SHOW_ICONS, True)
@@ -369,6 +378,16 @@ async def async_build_sections(hass: HomeAssistant, conf: dict[str, Any]) -> lis
         plan = [(area, by_area[area]) for area in named]
         if None in by_area:
             plan.append((None, by_area[None]))
+
+    if guest is not None and guest.scope is not None:
+        # A permanent code's own entities: shown where the dashboard or layout puts them, the rest by area.
+        allowed = list(guest.scope)
+        placed = {item.get("entity") for _, items in plan for item in items}
+        extra: dict[str | None, list[dict[str, Any]]] = {}
+        for entity_id in allowed:
+            if entity_id not in placed:
+                extra.setdefault(_area_name(hass, entity_id), []).append({"entity": entity_id})
+        plan = [*plan, *extra.items()]
 
     states = [s for _, items in plan for item in items if (s := hass.states.get(item.get("entity") or ""))]
     labels = await async_state_labels(hass, states)
@@ -415,10 +434,10 @@ async def async_background(hass: HomeAssistant, conf: dict[str, Any]) -> str | N
 class _GuestView(HomeAssistantView):
     requires_auth = False
 
-    def _guard(
+    def _place(
         self, request: web.Request
-    ) -> tuple[HomeAssistant, dict[str, Any], GuestRuntime, Guest] | web.Response:
-        """Return (hass, panel settings, runtime, guest), or the response that turns the caller away."""
+    ) -> tuple[HomeAssistant, dict[str, Any], GuestRuntime] | web.Response:
+        """The checks that do not depend on a link: panel on, Home Assistant's own address, allowed network."""
         hass = request.app["hass"]
         found = panel_config(hass)
         if found is None:
@@ -429,16 +448,33 @@ class _GuestView(HomeAssistantView):
         if not network_allowed(hass, request, conf):
             # The caller's own address helps the owner work out which network to allow.
             return self.json({"error": "network", "ip": request.remote}, HTTPStatus.FORBIDDEN)
+        return hass, conf, runtime
+
+    def _guard(
+        self, request: web.Request
+    ) -> tuple[HomeAssistant, dict[str, Any], GuestRuntime, Guest] | web.Response:
+        """Return (hass, panel settings, runtime, guest), or the response that turns the caller away."""
+        place = self._place(request)
+        if isinstance(place, web.Response):
+            return place
+        hass, conf, runtime = place
         guest = Guest(ip=str(request.remote))
-        if lifetime := link_seconds(conf):
-            token = request.headers.get(TOKEN_HEADER)
-            expires = token_expiry(conf[CONF_SECRET], token, lifetime)
-            if expires is None:
-                # Opening the bare address is ordinary; presenting a link that no longer works is worth reporting.
-                if token:
-                    runtime.async_blocked(guest, "link")
-                return self.json({"error": "link"}, HTTPStatus.FORBIDDEN)
-            guest = Guest(ip=guest.ip, link=token.partition(".")[2][:8], expires=expires)
+        lifetime = link_seconds(conf)
+        codes = conf.get(CONF_CODES, {})
+        token = request.headers.get(TOKEN_HEADER)
+        checked = check_token(conf[CONF_SECRET], token, lifetime, codes) if token else None
+        if checked is not None:
+            expires, ref = checked
+            guest = Guest(ip=guest.ip, link=token.rpartition(".")[2][:8], expires=expires)
+            if ref is not None:
+                code = codes[ref]
+                scope = tuple(code.get(CONF_ENTITIES) or ()) or None
+                guest = Guest(ip=guest.ip, link=guest.link, expires=expires, code=code.get(CONF_NAME), scope=scope)
+        elif lifetime:
+            # Opening the bare address is ordinary; presenting a link that no longer works is worth reporting.
+            if token:
+                runtime.async_blocked(guest, "link")
+            return self.json({"error": "link"}, HTTPStatus.FORBIDDEN)
         if not runtime.panel_open():
             # The same answer whatever the reason: it must not tell someone outside that nobody is home.
             runtime.async_blocked(guest, "paused")
@@ -479,10 +515,12 @@ class GuestStatesView(_GuestView):
             return guard
         hass, conf, runtime, guest = guard
         runtime.async_seen(guest)
+        title = conf.get(CONF_TITLE) or DEFAULT_TITLE
         appearance = conf.get(CONF_APPEARANCE, {})
         theme = theme_variables(hass, appearance.get(CONF_THEME))
         return self.json({
-            "title": conf.get(CONF_TITLE) or DEFAULT_TITLE,
+            "title": title,
+            "code": guest.code,
             "expires": guest.expires,
             "appearance": {
                 "mode": appearance.get(CONF_MODE, "auto"),
@@ -491,7 +529,7 @@ class GuestStatesView(_GuestView):
                 "accent": appearance.get(CONF_ACCENT) or None,
                 "welcome": appearance.get(CONF_WELCOME) or "",
             },
-            "sections": await async_build_sections(hass, conf),
+            "sections": await async_build_sections(hass, conf, guest),
         })
 
 
@@ -517,7 +555,7 @@ class GuestActionView(_GuestView):
         entity_id = body.get("entity_id")
         if (
             not isinstance(entity_id, str)
-            or entity_id not in await async_allowed_entities(hass, conf)
+            or entity_id not in await async_allowed_entities(hass, conf, guest)
             or (state := hass.states.get(entity_id)) is None
         ):
             return self.json({"error": "not_allowed"}, HTTPStatus.FORBIDDEN)
@@ -541,7 +579,37 @@ class GuestActionView(_GuestView):
         return self.json({"ok": True})
 
 
+class GuestRedeemView(_GuestView):
+    """Trade the key in a permanent QR code for a session on this phone that lasts the code's days."""
+
+    url = API_REDEEM_URL
+    name = "api:ha_guest:redeem"
+
+    async def post(self, request: web.Request) -> web.Response:
+        place = self._place(request)
+        if isinstance(place, web.Response):
+            return place
+        _, conf, runtime = place
+        if request.content_type != "application/json":
+            return self.json({"error": "invalid"}, HTTPStatus.BAD_REQUEST)
+        try:
+            body = await request.json()
+        except ValueError:
+            return self.json({"error": "invalid"}, HTTPStatus.BAD_REQUEST)
+        codes = conf.get(CONF_CODES, {})
+        guest = Guest(ip=str(request.remote))
+        if not isinstance(body, dict) or (ref := find_code(codes, body.get("key"))) is None:
+            runtime.async_blocked(guest, "link")
+            return self.json({"error": "link"}, HTTPStatus.FORBIDDEN)
+        if not runtime.panel_open():
+            runtime.async_blocked(guest, "paused")
+            return self.json({"error": "paused"}, HTTPStatus.FORBIDDEN)
+        token, expires = create_session(conf[CONF_SECRET], ref, code_seconds(codes[ref]))
+        return self.json({"token": token, "expires": expires})
+
+
 def async_register_views(hass: HomeAssistant) -> None:
     hass.http.register_view(GuestPageView())
     hass.http.register_view(GuestStatesView())
     hass.http.register_view(GuestActionView())
+    hass.http.register_view(GuestRedeemView())

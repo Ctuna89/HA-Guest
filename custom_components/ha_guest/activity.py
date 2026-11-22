@@ -45,6 +45,8 @@ class Guest:
     ip: str
     link: str | None = None  # a short id of the guest's link, when links are required
     expires: int | None = None
+    code: str | None = None  # the name of the permanent QR code the guest scanned, if any
+    scope: tuple[str, ...] | None = None  # the only entities that code allows; None for the whole panel
 
     @property
     def key(self) -> str:
@@ -175,7 +177,7 @@ class GuestRuntime:
 
     @staticmethod
     def _event_data(guest: Guest, data: dict[str, Any]) -> dict[str, Any]:
-        return {**data, "ip": guest.ip, "link": guest.link, "link_expires": guest.expires}
+        return {**data, "ip": guest.ip, "link": guest.link, "link_expires": guest.expires, "code": guest.code}
 
     @callback
     def _notify(self, guest: Guest, data: dict[str, Any]) -> None:

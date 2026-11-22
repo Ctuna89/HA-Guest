@@ -187,12 +187,32 @@
 
   // The link token arrives in the address (?t=...) and is remembered so the page can be reopened until it expires.
   const TOKEN_KEY = "ha_guest_token";
-  let token = new URLSearchParams(location.search).get("t");
+  const params = new URLSearchParams(location.search);
+  let token = params.get("t");
   try {
     if (token) localStorage.setItem(TOKEN_KEY, token);
     else token = localStorage.getItem(TOKEN_KEY);
   } catch (err) { /* storage can be unavailable in private windows */ }
-  const auth = token ? { "X-Guest-Token": token } : {};
+  let auth = token ? { "X-Guest-Token": token } : {};
+
+  // A permanent QR code (?k=...) is traded for a session on this phone, then removed from the address bar so the
+  // code is not left in the browser history.
+  async function redeem(key) {
+    history.replaceState(null, "", location.pathname);
+    let res;
+    try {
+      res = await fetch("/api/ha_guest/redeem", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key }),
+      });
+    } catch (err) {
+      return;
+    }
+    if (!res.ok) return;
+    const body = await res.json();
+    token = body.token;
+    auth = { "X-Guest-Token": token };
+    try { localStorage.setItem(TOKEN_KEY, token); } catch (err) { /* see above */ }
+  }
 
   const el = (tag, cls, text) => {
     const node = document.createElement(tag);
@@ -458,20 +478,21 @@
     content.replaceChildren(box);
   }
 
-  function showExpiry(expires) {
-    if (!expires) { expiryEl.textContent = ""; expiryEl.className = ""; return; }
+  function showExpiry(expires, code) {
+    if (!expires) { expiryEl.textContent = code || ""; expiryEl.className = ""; return; }
     const minutes = Math.max(0, Math.ceil((expires * 1000 - Date.now()) / 60000));
     const soon = minutes <= 15;
     expiryEl.className = soon ? "soon" : "";
-    expiryEl.textContent = soon ? T.soon.replace("{n}", minutes)
-      : T.until + new Date(expires * 1000).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
+    const text = soon ? T.soon.replace("{n}", minutes)
+      : T.until + new Date(expires * 1000).toLocaleString([], { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    expiryEl.textContent = code ? `${code} · ${text}` : text;
   }
 
   function render(data) {
     titleEl.textContent = data.title;
     document.title = data.title;
     welcomeEl.textContent = data.appearance.welcome;
-    showExpiry(data.expires);
+    showExpiry(data.expires, data.code);
     const key = JSON.stringify(data.appearance);
     if (key !== appearanceKey) {
       appearanceKey = key;
@@ -540,7 +561,7 @@
   }
 
   root.lang = ES ? "es" : "en";
-  refresh();
+  (params.get("k") ? redeem(params.get("k")) : Promise.resolve()).then(refresh);
   setInterval(() => { if (!document.hidden) refresh(); }, 3000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 })();

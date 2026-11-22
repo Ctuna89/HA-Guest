@@ -16,7 +16,25 @@ It covers two kinds of guest:
 
 ## Installation
 
-1. HACS → ⋮ menu → *Custom repositories* → add this repository as an **Integration**.
+The repository, to copy and paste:
+
+```
+Ctuna89/HA-Guest
+```
+
+```
+https://github.com/Ctuna89/HA-Guest
+```
+
+**Home Assistant 2026.11 or later (Marketplace):**
+
+1. *Settings → Marketplace → Add from link*, paste `Ctuna89/HA-Guest` and select **Add**.
+2. Install **HA Guest** and restart Home Assistant.
+3. *Settings → Devices & services → Add integration → HA Guest.*
+
+**Earlier versions (HACS):**
+
+1. HACS → ⋮ menu → *Custom repositories* → paste `https://github.com/Ctuna89/HA-Guest`, type **Integration**.
 2. Install **HA Guest** and restart Home Assistant.
 3. *Settings → Devices & services → Add integration → HA Guest.*
 
@@ -171,6 +189,25 @@ Home Assistant cannot see the name of a visitor's Wi-Fi, only their IP address: 
 restricted by network. Remote access through Home Assistant Cloud (Nabu Casa) is always rejected. If you use a
 reverse proxy, configure `trusted_proxies` under `http:` so Home Assistant sees the visitor's real IP.
 
+### Permanent QR codes (a code on the nightstand)
+
+For a room guests use again and again, such as a guest bedroom, print a code once instead of creating one per
+visit: **Configure → Permanent QR codes → Add**.
+
+- **Name**, for example «Guest bedroom». It is printed under the code and shown in the logbook («Guest bedroom
+  (192.168.1.20) turned off Bedside lamp»).
+- **Entities it allows:** only these, for example that room's lights. Empty means the whole guest panel.
+- **Session length** in days. Each phone that scans the code can use it for that long, then has to scan it again.
+
+Print it from the **Guest QR** page in the sidebar: each permanent code has a **Print** button that opens a sheet
+with the code, its name and a one-line instruction.
+
+**What this trades away:** the printed code itself never expires. Anyone who can see it (or a photo of it) and is
+on your network can start a new session. The session length only limits how long a phone keeps access without
+the code in front of it. Keep the allowed entities to that room, and combine it with a guest Wi-Fi or «Only while
+someone from the household is home». To revoke it, use **Edit → Replace this QR code** (the old printout and every
+session started with it stop working) or remove the code. Guest network, address and pause rules apply as usual.
+
 ### Safety and notifications
 
 Under **Configure → Safety and notifications**:
@@ -223,7 +260,7 @@ What the guest panel checks on every request, and what that means:
 
 What it cannot prevent: a link that is still valid works for anyone it is forwarded to who is on your network,
 until it expires. Keep the duration short, revoke all links when needed, and consider «Only while someone from the
-household is home».
+household is home». A permanent QR code never expires at all; see what that means under «Permanent QR codes».
 
 For restricted users, a Wi-Fi name (SSID) is easy to imitate: anyone can name a hotspot like your network. Prefer
 the phone's BSSID sensor (your router's address) or, better, a `device_tracker` from your router.

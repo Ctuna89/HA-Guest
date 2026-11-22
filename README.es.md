@@ -16,7 +16,25 @@ Cubre dos tipos de invitado:
 
 ## Instalación
 
-1. HACS → menú ⋮ → *Repositorios personalizados* → agrega este repositorio como **Integración**.
+El repositorio, para copiar y pegar:
+
+```
+Ctuna89/HA-Guest
+```
+
+```
+https://github.com/Ctuna89/HA-Guest
+```
+
+**Home Assistant 2026.11 o superior (Marketplace):**
+
+1. *Ajustes → Marketplace → Añadir desde un enlace*, pega `Ctuna89/HA-Guest` y selecciona **Añadir**.
+2. Instala **HA Guest** y reinicia Home Assistant.
+3. *Ajustes → Dispositivos y servicios → Añadir integración → HA Guest.*
+
+**Versiones anteriores (HACS):**
+
+1. HACS → menú ⋮ → *Repositorios personalizados* → pega `https://github.com/Ctuna89/HA-Guest`, tipo **Integración**.
 2. Instala **HA Guest** y reinicia Home Assistant.
 3. *Ajustes → Dispositivos y servicios → Añadir integración → HA Guest.*
 
@@ -173,6 +191,27 @@ Home Assistant no puede ver el nombre del WiFi del visitante, solo su dirección
 restringe por red. El acceso remoto por Home Assistant Cloud (Nabu Casa) siempre se rechaza. Si usas un proxy
 inverso, configura `trusted_proxies` en `http:` para que Home Assistant vea la IP real del visitante.
 
+### QR fijos (un código en el velador)
+
+Para una pieza que usan los invitados una y otra vez, como la pieza de invitados, imprime un código una sola vez en
+vez de crear uno en cada visita: **Configurar → QR fijos → Crear**.
+
+- **Nombre**, por ejemplo «Pieza de invitados». Se imprime bajo el código y aparece en el registro («Pieza de
+  invitados (192.168.1.20) apagó Lámpara del velador»).
+- **Entidades que permite:** solo estas, por ejemplo las luces de esa pieza. Vacío significa todo el panel.
+- **Duración de la sesión** en días. Cada teléfono que escanea el código puede usarlo ese tiempo, y después tiene
+  que escanearlo de nuevo.
+
+Imprímelo desde la página **Guest QR** de la barra lateral: cada QR fijo tiene un botón **Imprimir** que abre una
+hoja con el código, su nombre y una instrucción de una línea.
+
+**Lo que se sacrifica:** el código impreso no vence nunca. Cualquiera que lo vea (o tenga una foto) y esté en tu
+red puede iniciar una sesión nueva. La duración de la sesión solo limita cuánto tiempo un teléfono conserva el
+acceso sin tener el código enfrente. Limita sus entidades a esa pieza y combínalo con un WiFi de invitados o con
+«Solo si hay alguien de la casa». Para anularlo usa **Editar → Reemplazar este QR** (la hoja impresa y todas las
+sesiones iniciadas con ella dejan de funcionar) o elimina el código. Las reglas de red, dirección y pausa del panel
+se aplican igual.
+
 ### Seguridad y avisos
 
 En **Configurar → Seguridad y avisos**:
@@ -227,7 +266,7 @@ Lo que revisa el panel de invitados en cada solicitud, y lo que significa:
 
 Lo que no puede impedir: un enlace todavía vigente sirve para cualquiera a quien se lo reenvíen y esté en tu red,
 hasta que venza. Usa una duración corta, anula todos los enlaces cuando haga falta y considera «Solo si hay alguien
-de la casa».
+de la casa». Un QR fijo no vence nunca; lo que eso significa está en «QR fijos».
 
 Para los usuarios restringidos, el nombre del WiFi (SSID) es fácil de imitar: cualquiera puede ponerle ese nombre a
 un hotspot. Es mejor el sensor BSSID del teléfono (la dirección de tu router) o, mejor aún, un `device_tracker` de tu

@@ -15,6 +15,7 @@ from homeassistant.core import Context
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import Unauthorized
 from homeassistant.setup import async_setup_component
+from homeassistant.util import dt as dt_util
 
 from custom_components.ha_guest.const import DOMAIN
 from custom_components.ha_guest.permissions import group_id
@@ -187,7 +188,7 @@ async def test_config_and_options_flow(hass):
     await hass.async_block_till_done()
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert result["menu_options"] == ["panel", "appearance", "safety", "add_user", "revoke_links"]
+    assert result["menu_options"] == ["panel", "appearance", "safety", "codes", "add_user", "revoke_links"]
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "add_user"})
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"user": user.id})
     assert result["step_id"] == "user_settings"
@@ -206,7 +207,7 @@ async def test_config_and_options_flow(hass):
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["menu_options"] == [
-        "panel", "appearance", "safety", "add_user", "edit_user", "remove_user", "revoke_links",
+        "panel", "appearance", "safety", "codes", "add_user", "edit_user", "remove_user", "revoke_links",
     ]
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "remove_user"})
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"user": [user.id]})
@@ -393,7 +394,7 @@ async def test_activity_is_logged_and_notified(hass, hass_client_no_auth, entity
     action = events[-1]
     assert action.data | {"ip": None} == {
         "type": "action", "entity_id": LIVING, "name": "living", "action": "turn_on", "value": None,
-        "ip": None, "link": None, "link_expires": None,
+        "ip": None, "link": None, "link_expires": None, "code": None,
     }
     assert hass.states.get(LIVING).context.id == action.context.id
     assert [c.data["message"] for c in notify] == [
@@ -725,3 +726,105 @@ async def test_background_from_dashboard_theme_or_setting(hass, hass_client_no_a
     hass.config_entries.async_update_entry(entry, options=options)
     await hass.async_block_till_done()
     assert await background() == "/local/guests.jpg"
+
+
+
+async def _add_code(hass, entry, name, entities, days, ref=None, new_qr=False):
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "codes"})
+    if ref is None:
+        result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "add_code"})
+        form = {"name": name, "entities": entities, "days": days}
+    else:
+        result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "edit_code"})
+        result = await hass.config_entries.options.async_configure(result["flow_id"], {"code": ref})
+        form = {"name": name, "entities": entities, "days": days, "new_qr": new_qr}
+    assert result["step_id"] == "code_settings"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], form)
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+
+async def test_permanent_qr_code(hass, hass_client_no_auth, hass_ws_client, freezer):
+    """A printed code that never changes: each phone gets a session for some days, limited to the code's entities."""
+    events = async_capture_events(hass, "ha_guest_event")
+    entry = await _setup(hass, panel={"entities": [LIVING, BEDROOM], "link_hours": 2})
+    await _add_code(hass, entry, "Guest bedroom", [BEDROOM], 3)
+    (ref, code), = entry.options["codes"].items()
+    http = await hass_client_no_auth()
+
+    invite = (await _invite(await hass_ws_client(hass)))["result"]
+    printed, = invite["codes"]
+    assert printed["name"] == "Guest bedroom" and printed["days"] == 3
+    assert printed["url"].endswith(f"/guest?k={code['key']}") and printed["svg"].startswith("<svg")
+
+    async def redeem(key):
+        res = await http.post("/api/ha_guest/redeem", json={"key": key})
+        return res.status, await res.json()
+
+    assert (await redeem("nope"))[0] == 403
+    status, body = await redeem(code["key"])
+    assert status == 200
+    headers = {"X-Guest-Token": body["token"]}
+
+    data = await (await http.get("/api/ha_guest/states", headers=headers)).json()
+    assert data["code"] == "Guest bedroom"
+    assert [e["entity_id"] for s in data["sections"] for e in s["entities"]] == [BEDROOM]
+    assert (await http.post("/api/ha_guest/action", json={"entity_id": BEDROOM, "action": "turn_on"},
+                            headers=headers)).status == 200
+    assert (await http.post("/api/ha_guest/action", json={"entity_id": LIVING, "action": "turn_on"},
+                            headers=headers)).status == 403
+    assert events[-1].data["code"] == "Guest bedroom"
+
+    # The session outlives the 2-hour link duration, but not the code's 3 days; then the same printout works again.
+    freezer.tick(timedelta(days=1))
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 200
+    freezer.tick(timedelta(days=2, seconds=1))
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 403
+    status, body = await redeem(code["key"])
+    assert status == 200
+    headers = {"X-Guest-Token": body["token"]}
+
+    # Replacing the QR code ends the old printout and every session started with it.
+    await _add_code(hass, entry, "Guest bedroom", [BEDROOM], 3, ref=ref, new_qr=True)
+    (new_ref, new), = entry.options["codes"].items()
+    assert new_ref != ref and new["key"] != code["key"]
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 403
+    assert (await redeem(code["key"]))[0] == 403
+    status, body = await redeem(new["key"])
+    headers = {"X-Guest-Token": body["token"]}
+
+    # Editing without replacing keeps the printout and its sessions.
+    await _add_code(hass, entry, "Guest room", [BEDROOM, LIVING], 3, ref=new_ref)
+    data = await (await http.get("/api/ha_guest/states", headers=headers)).json()
+    assert data["code"] == "Guest room" and len([e for s in data["sections"] for e in s["entities"]]) == 2
+
+    # Removing the code ends its sessions too.
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "codes"})
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "remove_code"})
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"code": [new_ref]})
+    await hass.async_block_till_done()
+    assert entry.options["codes"] == {}
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 403
+
+
+async def test_code_sessions_cannot_be_forged(hass, hass_client_no_auth):
+    from custom_components.ha_guest.invite import _sign
+
+    entry = await _setup(hass, panel={"entities": [LIVING, BEDROOM], "link_hours": 2})
+    await _add_code(hass, entry, "Guest bedroom", [BEDROOM], 3)
+    ref = next(iter(entry.options["codes"]))
+    secret = entry.data["secret"]
+    http = await hass_client_no_auth()
+    now = int(dt_util.utcnow().timestamp())
+
+    async def status(token):
+        return (await http.get("/api/ha_guest/states", headers={"X-Guest-Token": token})).status
+
+    assert await status(f"{now + 3600}.{ref}.{_sign(secret, now + 3600, ref)}") == 200
+    far = now + 30 * 86400
+    assert await status(f"{far}.{ref}.{_sign(secret, far, ref)}") == 403  # longer than the code's days
+    assert await status(f"{now + 3600}.other.{_sign(secret, now + 3600, ref)}") == 403  # another code's name
+    assert await status(f"{now + 3600}.{ref}.{_sign(secret, now + 3600)}") == 403  # a plain link's signature
+    assert await status(f"{now + 3600}.{_sign(secret, now + 3600, ref)}") == 403  # a session cut down to a link

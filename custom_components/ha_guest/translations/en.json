@@ -39,6 +39,7 @@
           "panel": "Guest panel (no account)",
           "appearance": "Guest panel appearance",
           "safety": "Safety and notifications",
+          "codes": "Permanent QR codes",
           "add_user": "Restrict a user",
           "edit_user": "Edit a restricted user",
           "remove_user": "Stop restricting a user",
@@ -153,6 +154,44 @@
           "condition_states": "For example disarmed for an alarm that is off.",
           "notify": "Notify services, for example mobile_app_my_phone.",
           "notify_on": "Everything is also recorded in Home Assistant's logbook and as an ha_guest_event event."
+        }
+      },
+      "codes": {
+        "title": "Permanent QR codes",
+        "description": "A QR code you print and leave in a room, for example on the guest bedroom nightstand. The code itself never changes; each phone that scans it gets a session that lasts the days you set, and then has to scan it again. Anyone who can see the code and is on your network can use it, so give it only the entities of that room.",
+        "menu_options": {
+          "add_code": "Add a permanent QR code",
+          "edit_code": "Edit a permanent QR code",
+          "remove_code": "Remove a permanent QR code"
+        }
+      },
+      "code_settings": {
+        "title": "Permanent QR code",
+        "description": "Print it from the «Guest QR» page in the sidebar.",
+        "data": {
+          "name": "Name",
+          "entities": "Entities it allows",
+          "days": "Session length",
+          "new_qr": "Replace this QR code"
+        },
+        "data_description": {
+          "name": "For example «Guest bedroom». Shown on the printout and in the logbook.",
+          "entities": "Only these, for example the guest bedroom's lights. If empty, the whole guest panel.",
+          "days": "How long each phone can use it after scanning, before it has to scan again.",
+          "new_qr": "The printed code and every session started with it stop working. Print the new one."
+        }
+      },
+      "edit_code": {
+        "title": "Edit a permanent QR code",
+        "data": {
+          "code": "Code"
+        }
+      },
+      "remove_code": {
+        "title": "Remove permanent QR codes",
+        "description": "The printed codes and every session started with them stop working.",
+        "data": {
+          "code": "Code"
         }
       }
     },

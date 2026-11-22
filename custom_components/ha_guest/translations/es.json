@@ -39,6 +39,7 @@
           "panel": "Panel de invitados (sin cuenta)",
           "appearance": "Apariencia del panel de invitados",
           "safety": "Seguridad y avisos",
+          "codes": "QR fijos",
           "add_user": "Restringir a un usuario",
           "edit_user": "Editar un usuario restringido",
           "remove_user": "Quitar la restricción a un usuario",
@@ -153,6 +154,44 @@
           "condition_states": "Por ejemplo disarmed para una alarma desarmada.",
           "notify": "Servicios de notificación, por ejemplo mobile_app_mi_telefono.",
           "notify_on": "Todo queda además en el registro de Home Assistant y como evento ha_guest_event."
+        }
+      },
+      "codes": {
+        "title": "QR fijos",
+        "description": "Un código QR que imprimes y dejas en una pieza, por ejemplo en el velador de la pieza de invitados. El código no cambia nunca; cada teléfono que lo escanea recibe una sesión que dura los días que elijas, y después tiene que volver a escanearlo. Cualquiera que vea el código y esté en tu red puede usarlo, así que dale solo las entidades de esa pieza.",
+        "menu_options": {
+          "add_code": "Crear un QR fijo",
+          "edit_code": "Editar un QR fijo",
+          "remove_code": "Eliminar un QR fijo"
+        }
+      },
+      "code_settings": {
+        "title": "QR fijo",
+        "description": "Imprímelo desde la página «Guest QR» de la barra lateral.",
+        "data": {
+          "name": "Nombre",
+          "entities": "Entidades que permite",
+          "days": "Duración de la sesión",
+          "new_qr": "Reemplazar este QR"
+        },
+        "data_description": {
+          "name": "Por ejemplo «Pieza de invitados». Aparece en la hoja impresa y en el registro.",
+          "entities": "Solo estas, por ejemplo las luces de la pieza de invitados. Si lo dejas vacío, todo el panel de invitados.",
+          "days": "Cuánto puede usarlo cada teléfono después de escanearlo, antes de tener que escanearlo de nuevo.",
+          "new_qr": "El código impreso y todas las sesiones iniciadas con él dejan de funcionar. Imprime el nuevo."
+        }
+      },
+      "edit_code": {
+        "title": "Editar un QR fijo",
+        "data": {
+          "code": "Código"
+        }
+      },
+      "remove_code": {
+        "title": "Eliminar QR fijos",
+        "description": "Los códigos impresos y todas las sesiones iniciadas con ellos dejan de funcionar.",
+        "data": {
+          "code": "Código"
         }
       }
     },
