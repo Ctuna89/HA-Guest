@@ -462,14 +462,20 @@ class _GuestView(HomeAssistantView):
         lifetime = link_seconds(conf)
         codes = conf.get(CONF_CODES, {})
         token = request.headers.get(TOKEN_HEADER)
-        checked = check_token(conf[CONF_SECRET], token, lifetime, codes) if token else None
+        invitations = runtime.invitations.items if runtime.invitations is not None else {}
+        checked = check_token(conf[CONF_SECRET], token, lifetime, codes, invitations) if token else None
         if checked is not None:
-            expires, ref = checked
-            guest = Guest(ip=guest.ip, link=token.rpartition(".")[2][:8], expires=expires)
-            if ref is not None:
+            expires, kind, ref = checked
+            link = token.rpartition(".")[2][:8]
+            guest = Guest(ip=guest.ip, link=link, expires=expires)
+            if kind == "code":
                 code = codes[ref]
                 scope = tuple(code.get(CONF_ENTITIES) or ()) or None
-                guest = Guest(ip=guest.ip, link=guest.link, expires=expires, code=code.get(CONF_NAME), scope=scope)
+                guest = Guest(ip=guest.ip, link=link, expires=expires, code=code.get(CONF_NAME), scope=scope)
+            elif kind == "invite":
+                item = invitations[ref]
+                scope = tuple(item.get("entities") or ()) or None
+                guest = Guest(ip=guest.ip, link=link, expires=expires, code=item["name"], scope=scope, invite=ref)
         elif lifetime:
             # Opening the bare address is ordinary; presenting a link that no longer works is worth reporting.
             if token:

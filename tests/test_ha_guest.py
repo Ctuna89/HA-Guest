@@ -828,3 +828,72 @@ async def test_code_sessions_cannot_be_forged(hass, hass_client_no_auth):
     assert await status(f"{now + 3600}.other.{_sign(secret, now + 3600, ref)}") == 403  # another code's name
     assert await status(f"{now + 3600}.{ref}.{_sign(secret, now + 3600)}") == 403  # a plain link's signature
     assert await status(f"{now + 3600}.{_sign(secret, now + 3600, ref)}") == 403  # a session cut down to a link
+
+
+
+async def test_named_invitations(hass, hass_client_no_auth, hass_ws_client, freezer):
+    """One link per guest, with its own entities and expiry, that can be extended or revoked on its own."""
+    events = async_capture_events(hass, "ha_guest_event")
+    entry = await _setup(hass, panel={"entities": [LIVING, BEDROOM], "link_hours": 2})
+    member = await hass.auth.async_create_user("Hija", group_ids=[GROUP_ID_USER])
+    refresh = await hass.auth.async_create_refresh_token(member, "https://example.com")
+    http = await hass_client_no_auth()
+
+    async def call(**msg):
+        # A fresh connection each time: access tokens expire when the test moves the clock forward.
+        ws = await hass_ws_client(hass, hass.auth.async_create_access_token(refresh))
+        await ws.send_json({"id": 1, **msg})
+        return await ws.receive_json()
+
+    # Not more than the panel allows.
+    result = await call(type="ha_guest/invitations/create", name="Pedro", entities=[ALWAYS], hours=24)
+    assert result["error"]["code"] == "not_allowed"
+
+    result = await call(type="ha_guest/invitations/create", name="Pedro", entities=[BEDROOM], hours=24)
+    assert result["success"]
+    pedro, = result["result"]["invitations"]
+    assert pedro["name"] == "Pedro" and pedro["created_by"] == "Hija" and pedro["last_used"] is None
+    assert [e["entity_id"] for e in result["result"]["entities"]] == [LIVING, BEDROOM]
+    headers = {"X-Guest-Token": pedro["url"].split("?t=")[1]}
+
+    data = await (await http.get("/api/ha_guest/states", headers=headers)).json()
+    assert data["code"] == "Pedro" and data["expires"] == pedro["expires"]
+    assert [e["entity_id"] for s in data["sections"] for e in s["entities"]] == [BEDROOM]
+    assert (await http.post("/api/ha_guest/action", json={"entity_id": LIVING, "action": "turn_on"},
+                            headers=headers)).status == 403
+    assert events[-1].data["code"] == "Pedro"
+    listed, = (await call(type="ha_guest/invitations"))["result"]["invitations"]
+    assert listed["last_used"] is not None
+
+    # It outlives the 2-hour quick-link duration; extending keeps the same link working.
+    freezer.tick(timedelta(hours=23))
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 200
+    freezer.tick(timedelta(hours=2))
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 403
+    result = await call(type="ha_guest/invitations/extend", ref=pedro["ref"], hours=48)
+    assert result["success"]
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 200
+
+    # A forged token for the same invitation, or one for another, does not work.
+    ref = pedro["ref"]
+    for token in (f"i.{ref}." + "0" * 32, "i.deadbeef." + headers["X-Guest-Token"].rsplit(".", 1)[1]):
+        assert (await http.get("/api/ha_guest/states", headers={"X-Guest-Token": token})).status == 403
+
+    # It survives a restart of the integration, and revoking it ends it at once.
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 200
+    result = await call(type="ha_guest/invitations/revoke", ref=ref)
+    assert result["result"]["invitations"] == []
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 403
+
+
+async def test_restricted_users_cannot_manage_invitations(hass, hass_ws_client):
+    guest = await _create_user(hass)
+    await _setup(hass, users={guest.id: _user_conf()})
+    refresh = await hass.auth.async_create_refresh_token(guest, "https://example.com")
+    ws = await hass_ws_client(hass, hass.auth.async_create_access_token(refresh))
+    for msg_id, msg in enumerate(({"type": "ha_guest/invitations"},
+                                  {"type": "ha_guest/invitations/create", "name": "X", "hours": 1}), 1):
+        await ws.send_json({"id": msg_id, **msg})
+        assert (await ws.receive_json())["error"]["code"] == "unauthorized"

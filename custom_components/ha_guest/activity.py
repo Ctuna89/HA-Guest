@@ -47,6 +47,7 @@ class Guest:
     expires: int | None = None
     code: str | None = None  # the name of the permanent QR code the guest scanned, if any
     scope: tuple[str, ...] | None = None  # the only entities that code allows; None for the whole panel
+    invite: str | None = None  # the ref of the named invitation the guest's link belongs to, if any
 
     @property
     def key(self) -> str:
@@ -65,6 +66,7 @@ class GuestRuntime:
         self._reported: dict[str, float] = {}
         self._listeners: list[Callable[[], None]] = []
         self._expire: CALLBACK_TYPE | None = None
+        self.invitations: Any = None  # invitations.Invitations, set up with the entry
 
     @property
     def _safety(self) -> dict[str, Any]:
@@ -130,6 +132,8 @@ class GuestRuntime:
         previous = self._seen.get(guest.key)
         was_active = self.active_guests
         self._seen[guest.key] = now
+        if guest.invite and self.invitations is not None:
+            self.invitations.touch(guest.invite)
         if previous is None or now - previous > SESSION_GAP:
             self._report(guest, {"type": "open"})
         if self.active_guests != was_active or previous is None or now - previous >= ACTIVE_SECONDS:

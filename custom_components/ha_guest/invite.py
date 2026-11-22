@@ -55,6 +55,12 @@ def _sign(secret: str, expires: int, ref: str | None = None) -> str:
     return hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()[:32]
 
 
+def invite_token(secret: str, ref: str) -> str:
+    """The token in a named invitation's link: «i.ref.signature». Its expiry is stored with the invitation."""
+    mac = hmac.new(secret.encode(), f"invite.{ref}".encode(), hashlib.sha256).hexdigest()[:32]
+    return f"i.{ref}.{mac}"
+
+
 def new_code() -> tuple[str, str]:
     """(public ref, secret key) for a permanent QR code."""
     return secrets.token_hex(4), secrets.token_urlsafe(16)
@@ -83,20 +89,36 @@ def create_session(secret: str, ref: str, lifetime: int, now: float | None = Non
 
 
 def check_token(
-    secret: str, token: Any, link_lifetime: int, codes: dict[str, dict[str, Any]], now: float | None = None
-) -> tuple[int, str | None] | None:
-    """(expiry, code ref) of a valid link or code session; None if forged, expired or no longer allowed.
+    secret: str,
+    token: Any,
+    link_lifetime: int,
+    codes: dict[str, dict[str, Any]],
+    invitations: dict[str, dict[str, Any]] | None = None,
+    now: float | None = None,
+) -> tuple[int, str | None, str | None] | None:
+    """(expiry, kind, ref) of a valid token; None if forged, expired or no longer allowed.
 
-    A plain link («expires.signature») is valid for at most the current link duration. A session from a permanent
-    code («expires.ref.signature») is valid for at most that code's days, and only while the code still exists.
+    * A quick link («expires.signature»): kind None, valid for at most the current link duration.
+    * A session from a permanent code («expires.ref.signature»): kind «code», valid for at most that code's days,
+      and only while the code exists.
+    * A named invitation («i.ref.signature»): kind «invite», valid until the invitation's stored expiry, and only
+      while it exists.
     """
     if not isinstance(token, str) or not secret:
         return None
     parts = token.split(".")
     if len(parts) == 2:
-        return (expires, None) if (expires := token_expiry(secret, token, link_lifetime, now)) else None
+        return (expires, None, None) if (expires := token_expiry(secret, token, link_lifetime, now)) else None
     if len(parts) != 3:
         return None
+    if parts[0] == "i":
+        item = (invitations or {}).get(parts[1])
+        now = now if now is not None else time.time()
+        if item is None or not now < item["expires"]:
+            return None
+        if not hmac.compare_digest(token, invite_token(secret, parts[1])):
+            return None
+        return int(item["expires"]), "invite", parts[1]
     raw, ref, signature = parts
     if ref not in codes or not raw.isascii() or not raw.isdigit() or len(raw) > 12:
         return None
@@ -106,7 +128,7 @@ def check_token(
         return None
     if not hmac.compare_digest(signature, _sign(secret, expires, ref)):
         return None
-    return expires, ref
+    return expires, "code", ref
 
 
 def create_token(secret: str, lifetime: int, now: float | None = None) -> tuple[str, int]:
