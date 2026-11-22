@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.1 — 2026-11-22
+
+- **NFC tags for permanent codes:** on the **Guest QR** page, each permanent code can be written to an NFC tag, so
+  guests just hold their phone to it (iPhone XS and later, most Android phones, no app needed). **Write NFC tag**
+  works in Chrome on Android with Home Assistant opened over https; elsewhere, **Copy link** and write it as a URL
+  record with an app such as NFC Tools. An option locks the tag read-only so it cannot be overwritten. A tag works
+  exactly like the printed code, including the same trade-off: anyone who taps it and is on your network can use it.
+
 ## 0.8.0 — 2026-11-22
 
 - **Permanent QR codes** (*Configure → Permanent QR codes*): print one code for a room, such as the guest bedroom
