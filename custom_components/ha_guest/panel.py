@@ -9,8 +9,10 @@ how to translate into a service call.
 
 from __future__ import annotations
 
+import asyncio
 from http import HTTPStatus
 import re
+import time
 from ipaddress import ip_address, ip_network
 from pathlib import Path
 from typing import Any
@@ -23,6 +25,7 @@ from homeassistant.core import Context, HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
 from homeassistant.helpers.network import is_cloud_connection
+from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.translation import async_get_translations
 
 from .const import (
@@ -36,7 +39,10 @@ from .const import (
     CONF_WELCOME,
     DEFAULT_THEME,
     API_ACTION_URL,
+    API_MANIFEST_URL,
     API_REDEEM_URL,
+    API_STREAM_URL,
+    ICON_URL,
     CONF_CODES,
     CONF_NAME,
     API_STATES_URL,
@@ -136,6 +142,16 @@ SIMPLE_ACTIONS: dict[str, dict[str, str]] = {
         "turn_on": "turn_on", "turn_off": "turn_off", "play_pause": "media_play_pause",
         "volume_up": "volume_up", "volume_down": "volume_down",
     },
+}
+
+
+# Sent with every response of the guest panel: no MIME sniffing, no address leaking to other sites (links carry
+# tokens), no framing by other pages, no caching of what a guest saw.
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "X-Frame-Options": "DENY",
+    "Cache-Control": "no-store",
 }
 
 
@@ -434,6 +450,9 @@ async def async_background(hass: HomeAssistant, conf: dict[str, Any]) -> str | N
 class _GuestView(HomeAssistantView):
     requires_auth = False
 
+    def json(self, result: Any, status_code: int = HTTPStatus.OK, headers: Any = None) -> web.Response:
+        return super().json(result, status_code, headers={**SECURITY_HEADERS, **(headers or {})})
+
     def _place(
         self, request: web.Request
     ) -> tuple[HomeAssistant, dict[str, Any], GuestRuntime] | web.Response:
@@ -614,8 +633,86 @@ class GuestRedeemView(_GuestView):
         return self.json({"token": token, "expires": expires})
 
 
+STREAM_HEARTBEAT = 25  # seconds between keep-alives, and between re-checks of the guest's access
+STREAM_LIFETIME = 300  # the page reconnects after this, picking up changes to what it may see
+TOKEN_SHAPE = re.compile(r"^[A-Za-z0-9._-]{1,160}$")
+
+
+class GuestStreamView(_GuestView):
+    """Server-sent events: «change» whenever one of the guest's entities changes, so the page refreshes at once.
+
+    It carries no state itself; the page fetches it through the guarded states view. Access is re-checked on every
+    heartbeat, so an expired, revoked or paused guest is cut off within seconds.
+    """
+
+    url = API_STREAM_URL
+    name = "api:ha_guest:stream"
+
+    async def get(self, request: web.Request) -> web.StreamResponse:
+        guard = self._guard(request)
+        if isinstance(guard, web.Response):
+            return guard
+        hass, conf, _, guest = guard
+        entities = await async_allowed_entities(hass, conf, guest)
+        changed = asyncio.Event()
+        unsubscribe = async_track_state_change_event(hass, entities, lambda event: changed.set())
+        response = web.StreamResponse(headers={
+            "Content-Type": "text/event-stream", "Cache-Control": "no-store", "X-Accel-Buffering": "no",
+            **SECURITY_HEADERS,
+        })
+        try:
+            await response.prepare(request)
+            await response.write(b": connected\n\n")
+            ends = time.monotonic() + STREAM_LIFETIME
+            while time.monotonic() < ends:
+                try:
+                    await asyncio.wait_for(changed.wait(), STREAM_HEARTBEAT)
+                except TimeoutError:
+                    if isinstance(self._guard(request), web.Response):
+                        await response.write(b"event: end\ndata: access\n\n")
+                        break
+                    await response.write(b": ping\n\n")
+                    continue
+                await asyncio.sleep(0.2)  # fold a burst of changes (a scene) into one refresh
+                changed.clear()
+                await response.write(b"data: change\n\n")
+        except (ConnectionResetError, asyncio.CancelledError):
+            pass
+        finally:
+            unsubscribe()
+        return response
+
+
+class GuestManifestView(_GuestView):
+    """Lets guests add the panel to their home screen. The start address keeps the guest's link."""
+
+    requires_auth = False
+    url = API_MANIFEST_URL
+    name = "api:ha_guest:manifest"
+
+    async def get(self, request: web.Request) -> web.Response:
+        found = panel_config(request.app["hass"])
+        if found is None:
+            return web.Response(status=HTTPStatus.NOT_FOUND)
+        _, conf = found
+        token = request.query.get("t", "")
+        start = f"{PANEL_URL}?t={token}" if TOKEN_SHAPE.match(token) else PANEL_URL
+        title = conf.get(CONF_TITLE) or DEFAULT_TITLE
+        accent = conf.get(CONF_APPEARANCE, {}).get(CONF_ACCENT) or "#b45309"
+        return self.json({
+            "name": title, "short_name": title[:12], "start_url": start, "scope": PANEL_URL, "id": PANEL_URL,
+            "display": "standalone", "background_color": "#0f1115", "theme_color": accent,
+            "icons": [
+                {"src": ICON_URL.format(size=size), "sizes": f"{size}x{size}", "type": "image/png"}
+                for size in (256, 512)
+            ],
+        })
+
+
 def async_register_views(hass: HomeAssistant) -> None:
     hass.http.register_view(GuestPageView())
     hass.http.register_view(GuestStatesView())
     hass.http.register_view(GuestActionView())
     hass.http.register_view(GuestRedeemView())
+    hass.http.register_view(GuestStreamView())
+    hass.http.register_view(GuestManifestView())

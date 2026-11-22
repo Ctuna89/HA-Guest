@@ -897,3 +897,43 @@ async def test_restricted_users_cannot_manage_invitations(hass, hass_ws_client):
                                   {"type": "ha_guest/invitations/create", "name": "X", "hours": 1}), 1):
         await ws.send_json({"id": msg_id, **msg})
         assert (await ws.receive_json())["error"]["code"] == "unauthorized"
+
+
+
+async def test_live_updates(hass, hass_client_no_auth, hass_ws_client):
+    """The stream says «change» when one of the guest's entities changes, and nothing for the others."""
+    import asyncio
+
+    entry = await _setup(hass, panel={"entities": [LIVING, BEDROOM], "link_hours": 2})
+    http = await hass_client_no_auth()
+    assert (await http.get("/api/ha_guest/stream")).status == 403  # no link
+
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": "ha_guest/invitations/create", "name": "Pedro", "entities": [BEDROOM], "hours": 1})
+    url = (await ws.receive_json())["result"]["invitations"][0]["url"]
+    res = await http.get("/api/ha_guest/stream", headers={"X-Guest-Token": url.split("?t=")[1]})
+    assert res.status == 200 and res.headers["Content-Type"] == "text/event-stream"
+    assert res.headers["Referrer-Policy"] == "no-referrer"
+
+    async def line():
+        return (await asyncio.wait_for(res.content.readline(), 5)).decode().strip()
+
+    assert await line() == ": connected"
+    assert await line() == ""
+    await hass.services.async_call("input_boolean", "turn_on", {"entity_id": LIVING}, blocking=True)
+    await hass.services.async_call("input_boolean", "turn_on", {"entity_id": BEDROOM}, blocking=True)
+    assert await line() == "data: change"  # only the invitation's own entity woke the stream
+    res.close()
+
+
+async def test_home_screen_manifest(hass, hass_client_no_auth):
+    await _setup(hass)
+    http = await hass_client_no_auth()
+    manifest = await (await http.get("/api/ha_guest/manifest.json?t=123.abc")).json()
+    assert manifest["name"] == "Casa" and manifest["start_url"] == "/guest?t=123.abc"
+    assert manifest["scope"] == "/guest" and manifest["display"] == "standalone"
+    for icon in manifest["icons"]:
+        assert (await http.get(icon["src"])).status == 200
+    # Anything that is not token-shaped is not echoed into the start address.
+    manifest = await (await http.get("/api/ha_guest/manifest.json?t=a%20b%26x%3D1")).json()
+    assert manifest["start_url"] == "/guest"

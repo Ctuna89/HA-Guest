@@ -6,6 +6,9 @@
 <meta name="robots" content="noindex">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0f1115">
+<link rel="manifest" id="manifest" href="/api/ha_guest/manifest.json">
+<link rel="apple-touch-icon" href="/ha_guest_static/icon-256.png">
 <title>Guests</title>
 <style>
   /* These variables are the whole look. A Home Assistant theme chosen by the owner overrides them at run time. */
@@ -538,7 +541,10 @@
     }
   }
 
+  let lastOk = 0;
+
   async function refresh() {
+    lastOk = Date.now();
     let res;
     try {
       res = await fetch("/api/ha_guest/states", { cache: "no-store", headers: auth });
@@ -547,6 +553,7 @@
       return;
     }
     if (!res.ok) {
+      stopStream();
       titleEl.textContent = "";
       welcomeEl.textContent = "";
       showExpiry(null);
@@ -558,12 +565,70 @@
       return notice(T.wifi_title, T.wifi_text, body.ip ? T.your_ip + body.ip : "");
     }
     render(await res.json());
+    startStream();
+  }
+
+  // Live updates: the server sends «change» when one of the guest's entities changes, and the page refreshes.
+  // While that stream is up the page only checks in once a minute; without it, every 3 seconds.
+  let stream = null;
+  let live = false;
+  let retry = 0;
+  let pending = null;
+
+  function stopStream() {
+    if (stream) stream.abort();
+    stream = null;
+    live = false;
+  }
+
+  async function startStream() {
+    if (stream || document.hidden) return;
+    const controller = new AbortController();
+    stream = controller;
+    try {
+      const res = await fetch("/api/ha_guest/stream", { headers: auth, cache: "no-store", signal: controller.signal });
+      if (!res.ok || !res.body) throw new Error(String(res.status));
+      live = true;
+      retry = 0;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value, { stream: true });
+        if (text.includes("data: change") || text.includes("event: end")) {
+          clearTimeout(pending);
+          pending = setTimeout(refresh, 100);
+        }
+      }
+    } catch (err) { /* dropped, aborted or refused: fall back to polling */ }
+    const stopped = controller.signal.aborted;
+    if (stream === controller) { stream = null; live = false; }
+    if (!stopped && !document.hidden) {
+      retry = Math.min(retry + 1, 6);
+      setTimeout(startStream, 1000 * 2 ** retry);
+    }
+  }
+
+  // Keep the guest's link in the address and in the home-screen manifest, so the panel still opens once
+  // installed (iPhones give installed pages their own storage, without the saved link).
+  function rememberLink() {
+    if (!token) return;
+    document.getElementById("manifest").href = `/api/ha_guest/manifest.json?t=${encodeURIComponent(token)}`;
+    if (new URLSearchParams(location.search).get("t") !== token) {
+      history.replaceState(null, "", `${location.pathname}?t=${encodeURIComponent(token)}`);
+    }
   }
 
   root.lang = ES ? "es" : "en";
-  (params.get("k") ? redeem(params.get("k")) : Promise.resolve()).then(refresh);
-  setInterval(() => { if (!document.hidden) refresh(); }, 3000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+  (params.get("k") ? redeem(params.get("k")) : Promise.resolve()).then(() => { rememberLink(); refresh(); });
+  setInterval(() => {
+    if (!document.hidden && (!live || Date.now() - lastOk > 60000)) refresh();
+  }, 3000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stopStream();
+    else refresh();
+  });
 })();
 </script>
 </body>

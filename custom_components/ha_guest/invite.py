@@ -24,6 +24,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 
 from .const import (
+    ICON_URL,
     CONF_CODES,
     CONF_DAYS,
     CONF_KEY,
@@ -204,9 +205,13 @@ def _qr(url: str) -> str:
 
 async def async_setup_invites(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_invite)
-    await hass.http.async_register_static_paths(
-        [StaticPathConfig(STATIC_URL, str(Path(__file__).parent / "frontend" / "invite-panel.js"), False)]
-    )
+    here = Path(__file__).parent
+    await hass.http.async_register_static_paths([
+        StaticPathConfig(STATIC_URL, str(here / "frontend" / "invite-panel.js"), False),
+        # Home-screen icons for guests who install the panel.
+        StaticPathConfig(ICON_URL.format(size=256), str(here / "brand" / "icon.png"), True),
+        StaticPathConfig(ICON_URL.format(size=512), str(here / "brand" / "icon@2x.png"), True),
+    ])
 
 
 @callback
