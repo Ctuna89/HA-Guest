@@ -358,6 +358,16 @@ el servidor, así que vale igual para la app, el navegador y la API.
 - Si desactivas la integración, los usuarios restringidos quedan con su acceso de «fuera de casa». Al quitar la
   restricción a un usuario, o al eliminar la integración, recuperan el acceso normal.
 
+## Agradecimientos
+
+Gracias a [@rohithkadaveru](https://github.com/rohithkadaveru) por
+[HAPass](https://github.com/rohithkadaveru/ha-pass), un complemento (add-on) de Home Assistant para compartir
+enlaces de invitado. Varias ideas de HA Guest 0.9.0 vienen de ahí: invitaciones con nombre que se pueden extender o
+anular una por una, actualización en vivo, instalar el panel de invitados en la pantalla de inicio, límite de
+acciones, cabeceras de seguridad estrictas, un mensaje propio para enlaces vencidos, y los controles de velocidad
+del ventilador, pestillo de cerraduras y volumen. Si prefieres un complemento con enlaces que también funcionen fuera
+de tu red, vale la pena mirarlo.
+
 ## Desarrollo
 
 ```bash

@@ -349,6 +349,15 @@ server, so it applies equally to the app, the browser and the API.
 - If you disable the integration, restricted users keep their «away» access. When you stop restricting a user,
   or delete the integration, they get normal access back.
 
+## Acknowledgements
+
+Thanks to [@rohithkadaveru](https://github.com/rohithkadaveru) for
+[HAPass](https://github.com/rohithkadaveru/ha-pass), a Home Assistant add-on for shareable guest links. Several
+ideas in HA Guest 0.9.0 come from it: named invitations that can be extended or revoked one by one, live updates,
+installing the guest panel on the home screen, rate limiting, strict security headers, a custom message for
+expired links, and fan speed, lock unlatch and volume controls. If you prefer an add-on with links that also work
+outside your home network, give it a look.
+
 ## Development
 
 ```bash
