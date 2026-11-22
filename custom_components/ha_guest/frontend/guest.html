@@ -136,6 +136,10 @@
     lock: "Bloquear", unlock: "Desbloquear", locked: "Bloqueado", unlocked: "Desbloqueado",
     opened: "Abierto", closed: "Cerrado", play_pause: "Play / Pausa", start: "Iniciar", dock: "A la base",
     unavailable: "No disponible", failed: "No se pudo completar la acción",
+    not_yet_title: "Tu acceso todavía no empieza", not_yet_text: "Empieza el {when}",
+    schedule_title: "Ahora no tienes acceso", schedule_text: "Tu invitación funciona solo en ciertos horarios.",
+    claimed_title: "Este enlace ya se abrió en otro teléfono",
+    claimed_text: "Cada invitación sirve en un solo teléfono. Pide al dueño de casa que la libere o que te mande una nueva.",
     rate: "Demasiadas acciones seguidas. Espera un momento.", unlatch: "Abrir pestillo", speed: "Velocidad",
     volume: "Volumen",
     brightness: "Brillo", tone: "Tono", warm: "cálido", cool: "frío", temp_down: "Bajar temperatura", temp_up: "Subir temperatura",
@@ -157,6 +161,10 @@
     lock: "Lock", unlock: "Unlock", locked: "Locked", unlocked: "Unlocked",
     opened: "Open", closed: "Closed", play_pause: "Play / Pause", start: "Start", dock: "Dock",
     unavailable: "Unavailable", failed: "The action could not be completed",
+    not_yet_title: "Your access has not started yet", not_yet_text: "It starts on {when}",
+    schedule_title: "You do not have access right now", schedule_text: "Your invitation only works at certain times.",
+    claimed_title: "This link was already opened on another phone",
+    claimed_text: "Each invitation works on one phone. Ask your host to free it or send you a new one.",
     rate: "Too many actions in a row. Wait a moment.", unlatch: "Unlatch", speed: "Speed", volume: "Volume",
     brightness: "Brightness", tone: "Tone", warm: "warm", cool: "cool", temp_down: "Lower temperature", temp_up: "Raise temperature",
     vol_down: "Volume down", vol_up: "Volume up",
@@ -599,6 +607,13 @@
       showExpiry(null);
       if (res.status !== 403) return notice(T.off_title, T.off_text);
       const body = await res.json().catch(() => ({}));
+      if (body.error === "claim" && await claim()) return refresh();
+      if (body.error === "claim" || body.error === "claimed") return notice(T.claimed_title, T.claimed_text);
+      if (body.error === "not_yet") {
+        const when = new Date(body.starts * 1000).toLocaleString([], { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+        return notice(T.not_yet_title, T.not_yet_text.replace("{when}", when));
+      }
+      if (body.error === "schedule") return notice(T.schedule_title, T.schedule_text);
       if (body.error === "link") return notice(T.link_title, body.message || T.link_text);
       if (body.error === "paused") return notice(T.paused_title, T.paused_text);
       if (body.error === "host") return notice(T.host_title, T.host_text);
@@ -647,6 +662,23 @@
     if (!stopped && !document.hidden) {
       retry = Math.min(retry + 1, 6);
       setTimeout(startStream, 1000 * 2 ** retry);
+    }
+  }
+
+  // A single-phone invitation: this phone claims it and keeps its own token from then on.
+  async function claim() {
+    try {
+      const res = await fetch("/api/ha_guest/claim", {
+        method: "POST", headers: { "Content-Type": "application/json", ...auth }, body: "{}",
+      });
+      if (!res.ok) return false;
+      token = (await res.json()).token;
+      auth = { "X-Guest-Token": token };
+      try { localStorage.setItem(TOKEN_KEY, token); } catch (err) { /* storage may be unavailable */ }
+      rememberLink();
+      return true;
+    } catch (err) {
+      return false;
     }
   }
 

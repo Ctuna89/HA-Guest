@@ -1,0 +1,48 @@
+create_invitation:
+  fields:
+    name:
+      required: true
+      example: "Booking 1234"
+      selector:
+        text:
+    entities:
+      selector:
+        entity:
+          multiple: true
+    starts:
+      selector:
+        datetime:
+    duration:
+      selector:
+        duration:
+    ends:
+      selector:
+        datetime:
+    condition_entity:
+      selector:
+        entity:
+          domain:
+            - schedule
+            - input_boolean
+    single_device:
+      default: false
+      selector:
+        boolean:
+
+extend_invitation:
+  fields:
+    invitation:
+      required: true
+      selector:
+        text:
+    duration:
+      required: true
+      selector:
+        duration:
+
+revoke_invitation:
+  fields:
+    invitation:
+      required: true
+      selector:
+        text:

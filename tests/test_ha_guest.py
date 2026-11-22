@@ -993,3 +993,83 @@ async def test_fan_speed_and_lock_unlatch(hass, hass_client_no_auth):
     assert await act("lock.gate", "open") == 200 and open_calls[-1].data == {"entity_id": "lock.gate"}
     assert await act("lock.door", "open") == 400  # this lock cannot unlatch
     assert len(open_calls) == 1
+
+
+
+async def test_invitation_actions_for_automations(hass, hass_client_no_auth, freezer):
+    """A booking: starts at check-in, ends at check-out, only while a helper is on; extended and revoked by name."""
+    from homeassistant.exceptions import ServiceValidationError
+
+    await _setup(hass, panel={"entities": [LIVING, BEDROOM], "link_hours": 2})
+    hass.states.async_set("input_boolean.guests_allowed", "on")
+    http = await hass_client_no_auth()
+    now = dt_util.utcnow()
+
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(DOMAIN, "create_invitation", {"name": "X", "entities": [ALWAYS]},
+                                       blocking=True, return_response=True)
+
+    booking = await hass.services.async_call(DOMAIN, "create_invitation", {
+        "name": "Booking 1234", "entities": [BEDROOM],
+        "starts": (now + timedelta(hours=3)).isoformat(), "ends": (now + timedelta(days=2)).isoformat(),
+        "condition_entity": "input_boolean.guests_allowed",
+    }, blocking=True, return_response=True)
+    assert booking["name"] == "Booking 1234" and "/guest?t=i." in booking["url"]
+    assert dt_util.parse_datetime(booking["starts"]) == (now + timedelta(hours=3)).replace(microsecond=0)
+    headers = {"X-Guest-Token": booking["url"].split("?t=")[1]}
+
+    async def get():
+        res = await http.get("/api/ha_guest/states", headers=headers)
+        return res.status, (await res.json()).get("error")
+
+    assert await get() == (403, "not_yet")  # before check-in
+    freezer.tick(timedelta(hours=3, seconds=1))
+    assert await get() == (200, None)
+    hass.states.async_set("input_boolean.guests_allowed", "off")
+    assert await get() == (403, "schedule")  # the helper is off
+    hass.states.async_set("input_boolean.guests_allowed", "on")
+    assert await get() == (200, None)
+
+    freezer.tick(timedelta(days=2))
+    assert (await get())[0] == 403  # after check-out
+    extended = await hass.services.async_call(DOMAIN, "extend_invitation", {"invitation": "booking 1234", "duration": "06:00:00"},
+                                              blocking=True, return_response=True)
+    assert extended["invitation"] == booking["invitation"]
+    assert await get() == (200, None)
+    await hass.services.async_call(DOMAIN, "revoke_invitation", {"invitation": booking["invitation"]}, blocking=True)
+    assert (await get())[0] == 403
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(DOMAIN, "revoke_invitation", {"invitation": "nobody"}, blocking=True)
+
+
+async def test_single_phone_invitation(hass, hass_client_no_auth, hass_ws_client):
+    """The first phone to open the link keeps it; the same link forwarded to another phone does not work."""
+    await _setup(hass, panel={"entities": [LIVING], "link_hours": 2})
+    result = await hass.services.async_call(DOMAIN, "create_invitation", {"name": "Ana", "single_device": True},
+                                            blocking=True, return_response=True)
+    link = {"X-Guest-Token": result["url"].split("?t=")[1]}
+    http = await hass_client_no_auth()
+
+    res = await http.get("/api/ha_guest/states", headers=link)
+    assert res.status == 403 and (await res.json())["error"] == "claim"
+    res = await http.post("/api/ha_guest/claim", json={}, headers=link)
+    phone = {"X-Guest-Token": (await res.json())["token"]}
+    assert phone["X-Guest-Token"].startswith("d.")
+    assert (await http.get("/api/ha_guest/states", headers=phone)).status == 200
+    assert (await http.post("/api/ha_guest/action", json={"entity_id": LIVING, "action": "turn_on"}, headers=phone)).status == 200
+
+    # A second phone with the forwarded link.
+    res = await http.post("/api/ha_guest/claim", json={}, headers=link)
+    assert res.status == 403 and (await res.json())["error"] == "claimed"
+    res = await http.get("/api/ha_guest/states", headers=link)
+    assert (await res.json())["error"] == "claimed"
+    forged = {"X-Guest-Token": phone["X-Guest-Token"][:-4] + "AAAA"}
+    assert (await http.get("/api/ha_guest/states", headers=forged)).status == 403
+
+    # The household can free it for a new phone; the old phone stops working.
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": "ha_guest/invitations/release", "ref": result["invitation"]})
+    listed, = (await ws.receive_json())["result"]["invitations"]
+    assert listed["device"] is False and listed["single_device"] is True
+    assert (await http.get("/api/ha_guest/states", headers=phone)).status == 403
+    assert (await http.post("/api/ha_guest/claim", json={}, headers=link)).status == 200

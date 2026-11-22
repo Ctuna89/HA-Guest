@@ -8,6 +8,7 @@ page, but only with entities the guest panel already allows.
 
 from __future__ import annotations
 
+import hashlib
 import secrets
 import time
 from typing import Any
@@ -66,18 +67,54 @@ class Invitations:
             del self.items[ref]
 
     @callback
-    def create(self, name: str, entities: list[str], seconds: int, created_by: str | None) -> str:
+    def create(
+        self,
+        name: str,
+        entities: list[str],
+        seconds: int,
+        created_by: str | None,
+        starts: int | None = None,
+        condition: str | None = None,
+        single_device: bool = False,
+    ) -> str:
+        """A new invitation. «seconds» counts from «starts» when it starts later, else from now."""
         self._prune()
         ref = secrets.token_hex(4)
         while ref in self.items:
             ref = secrets.token_hex(4)
         now = int(time.time())
+        starts = int(starts) if starts and starts > now else None
         self.items[ref] = {
-            "name": name, "entities": entities, "created": now, "expires": now + seconds,
-            "created_by": created_by, "last_used": None,
+            "name": name, "entities": entities, "created": now, "starts": starts,
+            "expires": (starts or now) + seconds, "created_by": created_by, "last_used": None,
+            "condition": condition or None, "single_device": bool(single_device), "device": None,
         }
         self._save()
         return ref
+
+    def find(self, key: str) -> str | None:
+        """An invitation's ref from its ref or its name (the most recent one with that name)."""
+        if key in self.items:
+            return key
+        named = [ref for ref, item in self.items.items() if item["name"].casefold() == key.strip().casefold()]
+        return max(named, key=lambda ref: self.items[ref]["created"]) if named else None
+
+    @callback
+    def claim(self, ref: str) -> str | None:
+        """Bind a single-phone invitation to the phone opening it now; its device key, or None if already bound."""
+        item = self.items[ref]
+        if item.get("device"):
+            return None
+        key = secrets.token_urlsafe(16)
+        item["device"] = hashlib.sha256(key.encode()).hexdigest()
+        self._save()
+        return key
+
+    @callback
+    def release(self, ref: str) -> None:
+        """Let the invitation be opened on another phone (the guest changed phones)."""
+        self.items[ref]["device"] = None
+        self._save()
 
     @callback
     def extend(self, ref: str, seconds: int) -> None:
@@ -130,7 +167,43 @@ async def _async_listing(hass: HomeAssistant, runtime: Any, conf: dict[str, Any]
         (_describe(hass, secret, ref, item) for ref, item in runtime.invitations.items.items()),
         key=lambda item: -item["created"],
     )
-    return {"invitations": invitations, "entities": entities, "now": int(time.time())}
+    for item in invitations:
+        item["device"] = bool(item.get("device"))  # whether a phone is bound, never the key's hash
+        if item.get("condition"):
+            state = hass.states.get(item["condition"])
+            item["condition_name"] = state.name if state else item["condition"]
+    conditions = [
+        {"entity_id": state.entity_id, "name": state.name}
+        for state in sorted(hass.states.async_all(CONDITION_DOMAINS), key=lambda s: s.name.casefold())
+    ]
+    return {"invitations": invitations, "entities": entities, "conditions": conditions, "now": int(time.time())}
+
+
+CONDITION_DOMAINS = ("schedule", "input_boolean")
+
+
+async def async_create(
+    hass: HomeAssistant,
+    runtime: Any,
+    conf: dict[str, Any],
+    *,
+    name: str,
+    entities: list[str],
+    seconds: int,
+    created_by: str | None,
+    starts: int | None = None,
+    condition: str | None = None,
+    single_device: bool = False,
+) -> str:
+    """Create an invitation after checking what it asks for; raises ValueError with a reason code otherwise."""
+    if not set(entities) <= set(await async_allowed_entities(hass, conf)):
+        # Household members can narrow what a guest gets, never widen it beyond what the owner allowed.
+        raise ValueError("not_allowed")
+    if condition and condition.partition(".")[0] not in CONDITION_DOMAINS:
+        raise ValueError("bad_condition")
+    return runtime.invitations.create(
+        name, entities, seconds, created_by, starts=starts, condition=condition, single_device=single_device
+    )
 
 
 @websocket_api.websocket_command({vol.Required("type"): "ha_guest/invitations"})
@@ -146,18 +219,35 @@ async def ws_list(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
     vol.Required("name"): vol.All(str, vol.Strip, vol.Length(min=1, max=60)),
     vol.Optional("entities", default=[]): [str],
     vol.Required("hours"): vol.All(vol.Coerce(float), vol.Range(min=0.25, max=MAX_HOURS)),
+    vol.Optional("starts"): vol.Any(None, vol.Coerce(int)),
+    vol.Optional("condition"): vol.Any(None, str),
+    vol.Optional("single_device", default=False): bool,
 })
 @websocket_api.async_response
 async def ws_create(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     if (found := _context(hass, connection, msg)) is None:
         return
     runtime, conf = found
-    allowed = set(await async_allowed_entities(hass, conf))
-    # Household members can narrow what a guest gets, never widen it beyond what the owner allowed.
-    if not set(msg["entities"]) <= allowed:
-        connection.send_error(msg["id"], "not_allowed", "Some entities are not on the guest panel")
+    try:
+        await async_create(
+            hass, runtime, conf, name=msg["name"], entities=msg["entities"], seconds=int(msg["hours"] * 3600),
+            created_by=connection.user.name, starts=msg.get("starts"), condition=msg.get("condition"),
+            single_device=msg["single_device"],
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], str(err), "The invitation cannot be created")
         return
-    runtime.invitations.create(msg["name"], msg["entities"], int(msg["hours"] * 3600), connection.user.name)
+    connection.send_result(msg["id"], await _async_listing(hass, runtime, conf))
+
+
+@websocket_api.websocket_command({vol.Required("type"): "ha_guest/invitations/release", vol.Required("ref"): str})
+@websocket_api.async_response
+async def ws_release(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    if (found := _context(hass, connection, msg)) is None:
+        return
+    runtime, conf = found
+    if msg["ref"] in runtime.invitations.items:
+        runtime.invitations.release(msg["ref"])
     connection.send_result(msg["id"], await _async_listing(hass, runtime, conf))
 
 
@@ -190,5 +280,5 @@ async def ws_revoke(hass: HomeAssistant, connection: websocket_api.ActiveConnect
 
 @callback
 def async_setup_invitation_commands(hass: HomeAssistant) -> None:
-    for command in (ws_list, ws_create, ws_extend, ws_revoke):
+    for command in (ws_list, ws_create, ws_extend, ws_revoke, ws_release):
         websocket_api.async_register_command(hass, command)

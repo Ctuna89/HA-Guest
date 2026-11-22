@@ -112,14 +112,21 @@ def check_token(
         return (expires, None, None) if (expires := token_expiry(secret, token, link_lifetime, now)) else None
     if len(parts) != 3:
         return None
-    if parts[0] == "i":
+    if parts[0] in ("i", "d"):
         item = (invitations or {}).get(parts[1])
         now = now if now is not None else time.time()
         if item is None or not now < item["expires"]:
             return None
-        if not hmac.compare_digest(token, invite_token(secret, parts[1])):
+        if parts[0] == "i":
+            # The shared link. For a single-phone invitation it can only claim a phone, which the panel checks.
+            if not hmac.compare_digest(token, invite_token(secret, parts[1])):
+                return None
+            return int(item["expires"]), "invite", parts[1]
+        # «d.ref.key»: the phone a single-phone invitation is bound to.
+        bound = item.get("device") or ""
+        if not bound or not hmac.compare_digest(hashlib.sha256(parts[2].encode()).hexdigest(), bound):
             return None
-        return int(item["expires"]), "invite", parts[1]
+        return int(item["expires"]), "device", parts[1]
     raw, ref, signature = parts
     if ref not in codes or not raw.isascii() or not raw.isdigit() or len(raw) > 12:
         return None

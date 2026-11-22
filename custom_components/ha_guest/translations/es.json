@@ -250,5 +250,82 @@
     "panel": {
       "name": "Panel de invitados"
     }
+  },
+  "services": {
+    "create_invitation": {
+      "name": "Crear invitación",
+      "description": "Crea una invitación con nombre al panel de invitados y devuelve su enlace, por ejemplo al llegar una reserva.",
+      "fields": {
+        "name": {
+          "name": "Nombre",
+          "description": "El nombre del invitado, que aparece en la lista y en el registro."
+        },
+        "entities": {
+          "name": "Entidades",
+          "description": "Solo estas entidades. Vacío significa todo el panel de invitados. Deben estar en el panel."
+        },
+        "starts": {
+          "name": "Empieza",
+          "description": "Cuándo empieza a funcionar, por ejemplo el check-in. Vacío significa ahora."
+        },
+        "duration": {
+          "name": "Duración",
+          "description": "Cuánto dura desde que empieza. Por defecto 1 día."
+        },
+        "ends": {
+          "name": "Termina",
+          "description": "Cuándo deja de funcionar, por ejemplo el check-out. En vez de una duración."
+        },
+        "condition_entity": {
+          "name": "Solo mientras",
+          "description": "Un ayudante de horario o booleano: la invitación funciona solo mientras está encendido."
+        },
+        "single_device": {
+          "name": "Un solo teléfono",
+          "description": "El primer teléfono que abre el enlace se queda con él; reenviarlo no sirve."
+        }
+      }
+    },
+    "extend_invitation": {
+      "name": "Extender invitación",
+      "description": "Agrega tiempo a una invitación sin cambiar su enlace.",
+      "fields": {
+        "invitation": {
+          "name": "Invitación",
+          "description": "Su id (el que devolvió al crearla) o su nombre."
+        },
+        "duration": {
+          "name": "Duración",
+          "description": "Tiempo a agregar, desde ahora si ya venció."
+        }
+      }
+    },
+    "revoke_invitation": {
+      "name": "Anular invitación",
+      "description": "Termina una invitación al instante.",
+      "fields": {
+        "invitation": {
+          "name": "Invitación",
+          "description": "Su id (el que devolvió al crearla) o su nombre."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "panel_off": {
+      "message": "El panel de invitados está desactivado en la configuración de HA Guest."
+    },
+    "no_invitation": {
+      "message": "No hay ninguna invitación «{invitation}»."
+    },
+    "bad_period": {
+      "message": "La invitación debe durar más de cero y como máximo un año."
+    },
+    "not_allowed": {
+      "message": "Algunas entidades no están en el panel de invitados."
+    },
+    "bad_condition": {
+      "message": "La condición debe ser un ayudante de horario o un booleano."
+    }
   }
 }
