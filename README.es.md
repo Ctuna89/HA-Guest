@@ -47,9 +47,18 @@ Al añadir la integración se configura el panel:
 - **Redes permitidas:** la red de tu WiFi en formato CIDR, por ejemplo `192.168.1.0/24`. Se propone la red de tu
   Home Assistant. Si tienes una red de invitados aparte, pon esa (y asegúrate de que el router le permita llegar
   a Home Assistant).
-- **Entidades:** las que el invitado puede manejar. Luces (con brillo), enchufes, ventiladores, cortinas,
-  cerraduras, escenas, scripts, botones, clima, reproductores y aspiradoras tienen controles; cualquier otra
-  entidad se muestra como solo lectura.
+- **Entidades:** las que el invitado puede manejar. Luces (con brillo y tono), enchufes, ventiladores (con
+  velocidad), cortinas, cerraduras (con apertura del pestillo donde se puede), escenas, scripts, botones, clima,
+  reproductores (con volumen deslizable) y aspiradoras tienen controles; cualquier otra entidad se muestra como
+  solo lectura.
+
+Una escena o un script ejecuta todo lo que contiene, sin importar qué entidades vea el invitado: un script
+«Noche de cine» que además abre la puerta principal también la abre para los invitados. Dales solo scripts y
+escenas que tú ejecutarías por ellos.
+
+La página se actualiza en vivo: cuando algo cambia en la casa, el invitado lo ve en menos de un segundo. También
+puede agregar el panel a la pantalla de inicio del teléfono (*Compartir → Agregar a inicio* en iPhone, *⋮ → Agregar
+a la pantalla principal* o *Instalar* en Android) y abrirlo como una app; conserva su enlace.
 
 El invitado entra a `http://<ip-de-home-assistant>:8123/guest`. Lo más cómodo es dejar un código QR con esa
 dirección. Desde otra red, la página solo muestra «Conéctate al WiFi de la casa» junto a la dirección IP que
@@ -89,7 +98,9 @@ dashboard real exigiría darle a cada invitado una sesión de Home Assistant, y 
 | Un fondo puesto con card-mod o dentro de una tarjeta personalizada | No se detecta: ponlo en *Apariencia del panel de invitados → Imagen de fondo* |
 | Escenas, scripts y botones | Una fila de botones redondos |
 | Luces | Encender/apagar, brillo y, si tienen temperatura de color, control de tono |
-| Reproductores | Lo que suena, volumen y reproducir/pausa (sin elegir fuente ni zona) |
+| Ventiladores | Encender/apagar y, donde se puede, velocidad |
+| Cerraduras | Bloquear, desbloquear y, donde se puede, abrir el pestillo |
+| Reproductores | Lo que suena, reproducir/pausa y volumen deslizable (sin elegir fuente ni zona) |
 | Clima | Estado y temperatura |
 | El diseño propio de tarjetas personalizadas (Mushroom, button-card, bubble-card...) | No se reproduce: sus entidades aparecen como tarjetas de la página de invitados |
 | Saludos, reloj, plantillas, markdown, ventanas emergentes, grupos desplegables | No se muestran |
@@ -109,6 +120,8 @@ panel de invitados**:
 - **Modo claro u oscuro**, un **color de acento** (`#rrggbb`) que reemplaza el color principal del tema, y si se
   **muestran iconos**.
 - **Mensaje de bienvenida:** se muestra bajo el título, por ejemplo las reglas de la casa.
+- **Mensaje cuando el enlace ya no sirve:** lo que ve un invitado cuando su enlace venció o se anuló, por ejemplo
+  cómo pedirte uno nuevo.
 - **Imagen de fondo:** una foto detrás de la página, con las tarjetas translúcidas encima, como un dashboard con
   fondo. Se toma, en este orden, del ajuste *Imagen de fondo* (p. ej. `/local/fondo.jpg`, un archivo en la carpeta
   `www` de Home Assistant), del fondo de la vista del dashboard elegido, o del `lovelace-background` del tema. Con
@@ -153,7 +166,7 @@ color tienen un control de tono.
           lock: Cerrar con llave
   ```
 
-  `buttons` acepta `open`, `close`, `stop`, `lock`, `unlock`, `activate`, `play_pause`, `start` y `dock`.
+  `buttons` acepta `open`, `close`, `stop`, `lock`, `unlock`, `unlatch`, `activate`, `play_pause`, `start` y `dock`.
   `states` usa los estados internos de la entidad tal como los informa Home Assistant (`on`, `off`, `locked`,
   `open`…). Sin un icono propio, los iconos ya cambian con el estado como en Home Assistant (candado abierto al
   desbloquear, ampolleta vacía al apagar).
@@ -190,6 +203,25 @@ El código QR usa la dirección local de Home Assistant (*Ajustes → Sistema �
 Home Assistant no puede ver el nombre del WiFi del visitante, solo su dirección IP: por eso el panel se
 restringe por red. El acceso remoto por Home Assistant Cloud (Nabu Casa) siempre se rechaza. Si usas un proxy
 inverso, configura `trusted_proxies` en `http:` para que Home Assistant vea la IP real del visitante.
+
+### Invitaciones con nombre
+
+Para alguien en particular, como un amigo que se queda el fin de semana o quien hace el aseo los martes, crea una
+invitación en la página **Guest QR** en vez de un enlace rápido:
+
+- **Nombre del invitado**, **cuánto dura** (de 2 horas a 30 días) y **qué puede usar**: todo el panel de
+  invitados, o solo algunas de sus entidades.
+- Compártela como código QR o como enlace. Todo lo que haga queda registrado con su nombre («Pedro (192.168.1.20)
+  apagó Luces del living»).
+- La lista muestra cuándo vence cada invitación, cuándo se usó por última vez y quién la creó. **Extender** agrega
+  tiempo sin cambiar el enlace que ya tiene (también a una recién vencida), y **Anular** la termina al instante,
+  incluso con la página abierta.
+
+Cualquiera de la casa puede crear, extender y anular invitaciones, pero solo con entidades que ya estén en el panel
+de invitados. Los usuarios restringidos no pueden. Las invitaciones no dependen de la duración de enlaces del panel;
+las vencidas siguen en la lista una semana para poder extenderlas.
+
+<img src="docs/guest-invitations.png" alt="Invitaciones con nombre en la página Guest QR" width="320">
 
 ### QR fijos (un código en el velador)
 
@@ -276,9 +308,14 @@ Lo que revisa el panel de invitados en cada solicitud, y lo que significa:
   externa de Home Assistant, así que una página web abierta en tu red no puede usarlo a través de su propio
   dominio (DNS rebinding). Si lo abres con otro nombre, ponlo como URL interna.
 - **Acciones:** solo las entidades de la lista del panel (o del dashboard), y solo las acciones que ofrece su tarjeta.
+  Como máximo 30 acciones por minuto por invitado, y 10 intentos por minuto por dirección al canjear un QR fijo.
+- **Página:** una política de seguridad de contenido estricta (solo el script y los estilos propios de la página,
+  con un nonce nuevo en cada carga), y todas las respuestas van con `nosniff`, `no-referrer`, `no-store` y sin
+  permitir que otra página la incruste. Los enlaces llevan tokens, así que nunca se envían a otros sitios como
+  referencia.
 
 Lo que no puede impedir: un enlace todavía vigente sirve para cualquiera a quien se lo reenvíen y esté en tu red,
-hasta que venza. Usa una duración corta, anula todos los enlaces cuando haga falta y considera «Solo si hay alguien
+hasta que venza o lo anules (las invitaciones con nombre se pueden anular una por una). Usa una duración corta, anula todos los enlaces cuando haga falta y considera «Solo si hay alguien
 de la casa». Un QR fijo no vence nunca; lo que eso significa está en «QR fijos».
 
 Para los usuarios restringidos, el nombre del WiFi (SSID) es fácil de imitar: cualquiera puede ponerle ese nombre a
@@ -320,6 +357,16 @@ el servidor, así que vale igual para la app, el navegador y la API.
   interno de usuarios, así que una versión futura de Home Assistant podría requerir actualizarla.
 - Si desactivas la integración, los usuarios restringidos quedan con su acceso de «fuera de casa». Al quitar la
   restricción a un usuario, o al eliminar la integración, recuperan el acceso normal.
+
+## Agradecimientos
+
+Gracias a [@rohithkadaveru](https://github.com/rohithkadaveru) por
+[HAPass](https://github.com/rohithkadaveru/ha-pass), un complemento (add-on) de Home Assistant para compartir
+enlaces de invitado. Varias ideas de HA Guest 0.9.0 vienen de ahí: invitaciones con nombre que se pueden extender o
+anular una por una, actualización en vivo, instalar el panel de invitados en la pantalla de inicio, límite de
+acciones, cabeceras de seguridad estrictas, un mensaje propio para enlaces vencidos, y los controles de velocidad
+del ventilador, pestillo de cerraduras y volumen. Si prefieres un complemento con enlaces que también funcionen fuera
+de tu red, vale la pena mirarlo.
 
 ## Desarrollo
 

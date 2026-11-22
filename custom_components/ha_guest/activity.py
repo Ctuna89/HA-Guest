@@ -47,6 +47,7 @@ class Guest:
     expires: int | None = None
     code: str | None = None  # the name of the permanent QR code the guest scanned, if any
     scope: tuple[str, ...] | None = None  # the only entities that code allows; None for the whole panel
+    invite: str | None = None  # the ref of the named invitation the guest's link belongs to, if any
 
     @property
     def key(self) -> str:
@@ -65,6 +66,8 @@ class GuestRuntime:
         self._reported: dict[str, float] = {}
         self._listeners: list[Callable[[], None]] = []
         self._expire: CALLBACK_TYPE | None = None
+        self.invitations: Any = None  # invitations.Invitations, set up with the entry
+        self._hits: dict[str, list[float]] = {}
 
     @property
     def _safety(self) -> dict[str, Any]:
@@ -93,6 +96,20 @@ class GuestRuntime:
             state.state == STATE_HOME and state.attributes.get("user_id") not in restricted
             for state in self.hass.states.async_all("person")
         )
+
+    @callback
+    def allow(self, key: str, per_minute: int) -> bool:
+        """A simple sliding-window rate limit: False once «key» has been used per_minute times in the last minute."""
+        now = time.monotonic()
+        hits = [t for t in self._hits.get(key, []) if now - t < 60]
+        if len(hits) >= per_minute:
+            self._hits[key] = hits
+            return False
+        hits.append(now)
+        self._hits[key] = hits
+        if len(self._hits) > 1000:  # forget idle keys
+            self._hits = {k: v for k, v in self._hits.items() if v and now - v[-1] < 60}
+        return True
 
     # --- «in use» ------------------------------------------------------------------------------------------
 
@@ -130,6 +147,8 @@ class GuestRuntime:
         previous = self._seen.get(guest.key)
         was_active = self.active_guests
         self._seen[guest.key] = now
+        if guest.invite and self.invitations is not None:
+            self.invitations.touch(guest.invite)
         if previous is None or now - previous > SESSION_GAP:
             self._report(guest, {"type": "open"})
         if self.active_guests != was_active or previous is None or now - previous >= ACTIVE_SECONDS:

@@ -47,8 +47,16 @@ The panel is configured when you add the integration:
 - **Allowed networks:** your Wi-Fi network in CIDR format, for example `192.168.1.0/24`. Your Home Assistant's
   own network is suggested. If you have a separate guest network, use that one (and make sure the router lets it
   reach Home Assistant).
-- **Entities:** the ones a guest can control. Lights (with brightness), switches, fans, covers, locks, scenes,
-  scripts, buttons, climate, media players and vacuums get controls; any other entity is shown read-only.
+- **Entities:** the ones a guest can control. Lights (with brightness and tone), switches, fans (with speed),
+  covers, locks (with unlatch where supported), scenes, scripts, buttons, climate, media players (with a volume
+  slider) and vacuums get controls; any other entity is shown read-only.
+
+A scene or script runs everything it contains, whatever entities guests see: a «Movie night» script that also
+unlocks the front door unlocks it for guests too. Only give guests scripts and scenes you would run for them.
+
+The page updates live: when something changes in the house, guests see it within a second. They can also add the
+panel to their phone's home screen (*Share → Add to Home Screen* on iPhone, *⋮ → Add to Home screen* or
+*Install* on Android) and open it like an app; it keeps their link.
 
 Guests open `http://<home-assistant-ip>:8123/guest`. The easiest way is to leave a QR code with that address.
 From any other network the page only shows «Connect to the home Wi-Fi» along with the IP address Home Assistant
@@ -87,7 +95,9 @@ history) and would bypass the network check. So:
 | A background set with card-mod or inside a custom card | Not detected: set it under *Guest panel appearance → Background image* |
 | Scenes, scripts and buttons | A row of round buttons |
 | Lights | On/off, brightness and, with colour temperature, a tone slider |
-| Media players | What is playing, volume and play/pause (no source or zone selection) |
+| Fans | On/off and, where supported, a speed slider |
+| Locks | Lock, unlock and, where supported, unlatch |
+| Media players | What is playing, play/pause and a volume slider (no source or zone selection) |
 | Weather | Condition and temperature |
 | Custom cards' own design (Mushroom, button-card, bubble-card...) | Not reproduced: their entities appear as guest-page cards |
 | Greetings, clock, templates, markdown, pop-ups, expandable groups | Not shown |
@@ -107,6 +117,8 @@ appearance**:
 - **Light or dark mode**, an **accent colour** (`#rrggbb`) that replaces the theme's primary colour, and whether
   to **show icons**.
 - **Welcome message:** shown under the title, for example the house rules.
+- **Message when a link no longer works:** what a guest sees when their link expired or was revoked, for example
+  how to reach you for a new one.
 - **Background image:** a photo behind the page, with frosted-glass cards over it, like a dashboard with a
   background. It is taken, in this order, from the *Background image* setting (e.g. `/local/background.jpg`, a file
   in Home Assistant's `www` folder), the chosen dashboard's view background, or the theme's `lovelace-background`.
@@ -151,7 +163,7 @@ tone slider.
           lock: Lock
   ```
 
-  `buttons` accepts `open`, `close`, `stop`, `lock`, `unlock`, `activate`, `play_pause`, `start` and `dock`.
+  `buttons` accepts `open`, `close`, `stop`, `lock`, `unlock`, `unlatch`, `activate`, `play_pause`, `start` and `dock`.
   `states` uses the entity's raw states as Home Assistant reports them (`on`, `off`, `locked`, `open`…). Without
   an icon of your own, icons already follow the state the way Home Assistant shows them (an open padlock when
   unlocked, an outline bulb when off).
@@ -188,6 +200,25 @@ The QR code uses Home Assistant's local address (*Settings → System → Networ
 Home Assistant cannot see the name of a visitor's Wi-Fi, only their IP address: that is why the panel is
 restricted by network. Remote access through Home Assistant Cloud (Nabu Casa) is always rejected. If you use a
 reverse proxy, configure `trusted_proxies` under `http:` so Home Assistant sees the visitor's real IP.
+
+### Named invitations
+
+For someone specific, such as a friend staying the weekend or a cleaner every Tuesday, create an invitation on the
+**Guest QR** page instead of a quick link:
+
+- **Guest's name**, **how long** it lasts (2 hours to 30 days) and **what they can use**: the whole guest panel,
+  or only some of its entities.
+- Share it as a QR code or a link. Everything they do is logged under their name («Pedro (192.168.1.20) turned off
+  Living room lights»).
+- The list shows when each invitation expires, when it was last used and who created it. **Extend** adds time
+  without changing the link they already have (also for one that just expired), and **Revoke** ends it at once,
+  even on a page that is open.
+
+Anyone in the household can create, extend and revoke invitations, but only with entities already on the guest
+panel. Restricted users cannot. Invitations are not tied to the link duration in the panel settings; expired ones
+stay listed for a week so you can extend them.
+
+<img src="docs/guest-invitations.png" alt="Named invitations on the Guest QR page" width="320">
 
 ### Permanent QR codes (a code on the nightstand)
 
@@ -269,10 +300,14 @@ What the guest panel checks on every request, and what that means:
 - **Address:** the panel only answers when opened through an IP address, a `.local` name, or Home Assistant's
   internal or external URL, so a website opened on the home network cannot use it through its own domain name
   (DNS rebinding). If you open it through another name, set that name as the internal URL.
-- **Actions:** only entities on the panel's list (or dashboard), and only the actions their card offers.
+- **Actions:** only entities on the panel's list (or dashboard), and only the actions their card offers. At most
+  30 actions a minute per guest, and 10 attempts a minute per address at redeeming a permanent code.
+- **Page:** a strict Content Security Policy (only the page's own script and styles, with a new nonce on every
+  load), and every response is sent with `nosniff`, `no-referrer`, `no-store` and framing denied. Links carry
+  tokens, so they are never sent to other sites as a referrer.
 
 What it cannot prevent: a link that is still valid works for anyone it is forwarded to who is on your network,
-until it expires. Keep the duration short, revoke all links when needed, and consider «Only while someone from the
+until it expires or you revoke it (named invitations can be revoked one by one). Keep the duration short, revoke all links when needed, and consider «Only while someone from the
 household is home». A permanent QR code never expires at all; see what that means under «Permanent QR codes».
 
 For restricted users, a Wi-Fi name (SSID) is easy to imitate: anyone can name a hotspot like your network. Prefer
@@ -313,6 +348,15 @@ server, so it applies equally to the app, the browser and the API.
   so a future Home Assistant release may require an update.
 - If you disable the integration, restricted users keep their «away» access. When you stop restricting a user,
   or delete the integration, they get normal access back.
+
+## Acknowledgements
+
+Thanks to [@rohithkadaveru](https://github.com/rohithkadaveru) for
+[HAPass](https://github.com/rohithkadaveru/ha-pass), a Home Assistant add-on for shareable guest links. Several
+ideas in HA Guest 0.9.0 come from it: named invitations that can be extended or revoked one by one, live updates,
+installing the guest panel on the home screen, rate limiting, strict security headers, a custom message for
+expired links, and fan speed, lock unlatch and volume controls. If you prefer an add-on with links that also work
+outside your home network, give it a look.
 
 ## Development
 

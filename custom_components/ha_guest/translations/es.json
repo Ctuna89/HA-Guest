@@ -116,6 +116,7 @@
           "mode": "Modo claro u oscuro",
           "accent": "Color de acento",
           "welcome": "Mensaje de bienvenida",
+          "expired_message": "Mensaje cuando el enlace ya no sirve",
           "background": "Imagen de fondo",
           "show_icons": "Mostrar iconos",
           "layout": "Diseño (YAML)"
@@ -125,7 +126,8 @@
           "accent": "Opcional, en formato #rrggbb. Reemplaza el color principal del tema.",
           "welcome": "Opcional. Se muestra bajo el título; por ejemplo las reglas de la casa.",
           "layout": "Opcional. Lista de secciones con título y entidades, como en una tarjeta de entidades. Cada entidad puede llevar name, icon (uno, o uno por estado), states (el texto de cada estado) y buttons (el texto de cada botón). Si lo dejas vacío, se agrupan por área. Si el panel usa un dashboard, el diseño es el del dashboard y este campo no se usa.",
-          "background": "Opcional, por ejemplo /local/fondo.jpg (un archivo en la carpeta www de Home Assistant). Si lo dejas vacío se usa el fondo del dashboard elegido o el del tema. Con una imagen, las tarjetas se ven translúcidas."
+          "background": "Opcional, por ejemplo /local/fondo.jpg (un archivo en la carpeta www de Home Assistant). Si lo dejas vacío se usa el fondo del dashboard elegido o el del tema. Con una imagen, las tarjetas se ven translúcidas.",
+          "expired_message": "Opcional. Lo ve el invitado cuando su enlace vence o se anula, por ejemplo «Escríbeme por WhatsApp al +56 9 1234 5678 y te mando uno nuevo»."
         }
       },
       "home_state": {

@@ -252,7 +252,7 @@ async def test_expiring_links(hass, hass_client_no_auth, hass_ws_client, freezer
 
     # On the right network, but without a link from the household.
     res = await http.get("/api/ha_guest/states")
-    assert res.status == 403 and (await res.json()) == {"error": "link"}
+    assert res.status == 403 and (await res.json()) == {"error": "link", "message": ""}
     assert (await http.get("/api/ha_guest/states", headers={"X-Guest-Token": "9999999999.abc"})).status == 403
 
     invite = (await _invite(ws))["result"]
@@ -828,3 +828,168 @@ async def test_code_sessions_cannot_be_forged(hass, hass_client_no_auth):
     assert await status(f"{now + 3600}.other.{_sign(secret, now + 3600, ref)}") == 403  # another code's name
     assert await status(f"{now + 3600}.{ref}.{_sign(secret, now + 3600)}") == 403  # a plain link's signature
     assert await status(f"{now + 3600}.{_sign(secret, now + 3600, ref)}") == 403  # a session cut down to a link
+
+
+
+async def test_named_invitations(hass, hass_client_no_auth, hass_ws_client, freezer):
+    """One link per guest, with its own entities and expiry, that can be extended or revoked on its own."""
+    events = async_capture_events(hass, "ha_guest_event")
+    entry = await _setup(hass, panel={"entities": [LIVING, BEDROOM], "link_hours": 2})
+    member = await hass.auth.async_create_user("Hija", group_ids=[GROUP_ID_USER])
+    refresh = await hass.auth.async_create_refresh_token(member, "https://example.com")
+    http = await hass_client_no_auth()
+
+    async def call(**msg):
+        # A fresh connection each time: access tokens expire when the test moves the clock forward.
+        ws = await hass_ws_client(hass, hass.auth.async_create_access_token(refresh))
+        await ws.send_json({"id": 1, **msg})
+        return await ws.receive_json()
+
+    # Not more than the panel allows.
+    result = await call(type="ha_guest/invitations/create", name="Pedro", entities=[ALWAYS], hours=24)
+    assert result["error"]["code"] == "not_allowed"
+
+    result = await call(type="ha_guest/invitations/create", name="Pedro", entities=[BEDROOM], hours=24)
+    assert result["success"]
+    pedro, = result["result"]["invitations"]
+    assert pedro["name"] == "Pedro" and pedro["created_by"] == "Hija" and pedro["last_used"] is None
+    assert [e["entity_id"] for e in result["result"]["entities"]] == [LIVING, BEDROOM]
+    headers = {"X-Guest-Token": pedro["url"].split("?t=")[1]}
+
+    data = await (await http.get("/api/ha_guest/states", headers=headers)).json()
+    assert data["code"] == "Pedro" and data["expires"] == pedro["expires"]
+    assert [e["entity_id"] for s in data["sections"] for e in s["entities"]] == [BEDROOM]
+    assert (await http.post("/api/ha_guest/action", json={"entity_id": LIVING, "action": "turn_on"},
+                            headers=headers)).status == 403
+    assert events[-1].data["code"] == "Pedro"
+    listed, = (await call(type="ha_guest/invitations"))["result"]["invitations"]
+    assert listed["last_used"] is not None
+
+    # It outlives the 2-hour quick-link duration; extending keeps the same link working.
+    freezer.tick(timedelta(hours=23))
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 200
+    freezer.tick(timedelta(hours=2))
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 403
+    result = await call(type="ha_guest/invitations/extend", ref=pedro["ref"], hours=48)
+    assert result["success"]
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 200
+
+    # A forged token for the same invitation, or one for another, does not work.
+    ref = pedro["ref"]
+    for token in (f"i.{ref}." + "0" * 32, "i.deadbeef." + headers["X-Guest-Token"].rsplit(".", 1)[1]):
+        assert (await http.get("/api/ha_guest/states", headers={"X-Guest-Token": token})).status == 403
+
+    # It survives a restart of the integration, and revoking it ends it at once.
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 200
+    result = await call(type="ha_guest/invitations/revoke", ref=ref)
+    assert result["result"]["invitations"] == []
+    assert (await http.get("/api/ha_guest/states", headers=headers)).status == 403
+
+
+async def test_restricted_users_cannot_manage_invitations(hass, hass_ws_client):
+    guest = await _create_user(hass)
+    await _setup(hass, users={guest.id: _user_conf()})
+    refresh = await hass.auth.async_create_refresh_token(guest, "https://example.com")
+    ws = await hass_ws_client(hass, hass.auth.async_create_access_token(refresh))
+    for msg_id, msg in enumerate(({"type": "ha_guest/invitations"},
+                                  {"type": "ha_guest/invitations/create", "name": "X", "hours": 1}), 1):
+        await ws.send_json({"id": msg_id, **msg})
+        assert (await ws.receive_json())["error"]["code"] == "unauthorized"
+
+
+
+async def test_live_updates(hass, hass_client_no_auth, hass_ws_client):
+    """The stream says «change» when one of the guest's entities changes, and nothing for the others."""
+    import asyncio
+
+    entry = await _setup(hass, panel={"entities": [LIVING, BEDROOM], "link_hours": 2})
+    http = await hass_client_no_auth()
+    assert (await http.get("/api/ha_guest/stream")).status == 403  # no link
+
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": "ha_guest/invitations/create", "name": "Pedro", "entities": [BEDROOM], "hours": 1})
+    url = (await ws.receive_json())["result"]["invitations"][0]["url"]
+    res = await http.get("/api/ha_guest/stream", headers={"X-Guest-Token": url.split("?t=")[1]})
+    assert res.status == 200 and res.headers["Content-Type"] == "text/event-stream"
+    assert res.headers["Referrer-Policy"] == "no-referrer"
+
+    async def line():
+        return (await asyncio.wait_for(res.content.readline(), 5)).decode().strip()
+
+    assert await line() == ": connected"
+    assert await line() == ""
+    await hass.services.async_call("input_boolean", "turn_on", {"entity_id": LIVING}, blocking=True)
+    await hass.services.async_call("input_boolean", "turn_on", {"entity_id": BEDROOM}, blocking=True)
+    assert await line() == "data: change"  # only the invitation's own entity woke the stream
+    res.close()
+
+
+async def test_home_screen_manifest(hass, hass_client_no_auth):
+    await _setup(hass)
+    http = await hass_client_no_auth()
+    manifest = await (await http.get("/api/ha_guest/manifest.json?t=123.abc")).json()
+    assert manifest["name"] == "Casa" and manifest["start_url"] == "/guest?t=123.abc"
+    assert manifest["scope"] == "/guest" and manifest["display"] == "standalone"
+    for icon in manifest["icons"]:
+        assert (await http.get(icon["src"])).status == 200
+    # Anything that is not token-shaped is not echoed into the start address.
+    manifest = await (await http.get("/api/ha_guest/manifest.json?t=a%20b%26x%3D1")).json()
+    assert manifest["start_url"] == "/guest"
+
+
+
+async def test_page_security_headers(hass, hass_client_no_auth):
+    await _setup(hass)
+    http = await hass_client_no_auth()
+    res = await http.get("/guest")
+    html = await res.text()
+    policy = res.headers["Content-Security-Policy"]
+    nonce = policy.split("'nonce-")[1].split("'")[0]
+    assert f'<script nonce="{nonce}">' in html and f'<style nonce="{nonce}">' in html
+    assert "unsafe-inline" not in policy and "frame-ancestors 'none'" in policy and "connect-src 'self'" in policy
+    assert res.headers["X-Content-Type-Options"] == "nosniff" and res.headers["Referrer-Policy"] == "no-referrer"
+    # A new nonce on every load.
+    assert (await http.get("/guest")).headers["Content-Security-Policy"] != policy
+    res = await http.get("/api/ha_guest/states")
+    assert res.headers["X-Content-Type-Options"] == "nosniff" and res.headers["Cache-Control"] == "no-store"
+
+
+async def test_action_rate_limit(hass, hass_client_no_auth):
+    await _setup(hass)
+    http = await hass_client_no_auth()
+    body = {"entity_id": LIVING, "action": "toggle"}
+    statuses = [(await http.post("/api/ha_guest/action", json=body)).status for _ in range(32)]
+    assert statuses[:30] == [200] * 30 and statuses[30:] == [429, 429]
+
+
+async def test_expired_link_message(hass, hass_client_no_auth):
+    await _setup(hass, panel={"link_hours": 1})
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    options = {**entry.options, "appearance": {"expired_message": "Text me on 555-0100"}}
+    hass.config_entries.async_update_entry(entry, options=options)
+    await hass.async_block_till_done()
+    http = await hass_client_no_auth()
+    res = await http.get("/api/ha_guest/states", headers={"X-Guest-Token": "1.bad"})
+    assert await res.json() == {"error": "link", "message": "Text me on 555-0100"}
+
+
+async def test_fan_speed_and_lock_unlatch(hass, hass_client_no_auth):
+    fan_calls = async_mock_service(hass, "fan", "set_percentage")
+    open_calls = async_mock_service(hass, "lock", "open")
+    hass.states.async_set("fan.ceiling", "on", {"percentage": 50, "percentage_step": 25})
+    hass.states.async_set("lock.gate", "locked", {"supported_features": 1})
+    hass.states.async_set("lock.door", "locked", {"supported_features": 0})
+    await _setup(hass, panel={"entities": ["fan.ceiling", "lock.gate", "lock.door"]})
+    http = await hass_client_no_auth()
+
+    async def act(entity_id, action, value=None):
+        return (await http.post("/api/ha_guest/action", json={"entity_id": entity_id, "action": action, "value": value})).status
+
+    assert await act("fan.ceiling", "percentage", 75) == 200
+    assert fan_calls[-1].data == {"entity_id": "fan.ceiling", "percentage": 75}
+    assert await act("fan.ceiling", "percentage", 150) == 400
+    assert await act("lock.gate", "open") == 200 and open_calls[-1].data == {"entity_id": "lock.gate"}
+    assert await act("lock.door", "open") == 400  # this lock cannot unlatch
+    assert len(open_calls) == 1

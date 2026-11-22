@@ -16,6 +16,14 @@ const TEXT = {
     nfc_locked: "Done, and the tag is locked.", nfc_failed: "Could not write the tag: {error}",
     nfc_unsupported: "This browser cannot write NFC tags. It works in Chrome on Android with Home Assistant opened over https (for example your Home Assistant Cloud address). Otherwise copy the link and write it as a URL record with an app such as NFC Tools.",
     copy_link: "Copy link",
+    invites: "Invitations", invites_help: "A link for one guest, with its own name, what they can use and how long it lasts. You can extend or revoke each one.",
+    guest_name: "Guest's name", invite: "Invite", whole: "The whole guest panel", some: "Only:",
+    valid_for: "Valid for", h2: "2 hours", h6: "6 hours", d1: "1 day", d3: "3 days", w1: "1 week", d30: "30 days",
+    expires_at: "Expires {when}", expired_at: "Expired {when}", never_used: "Not used yet", used_at: "Last used {when}",
+    by: "created by {who}", show_qr: "QR code", hide_qr: "Hide", extend: "Extend", extend_by: "Extend by",
+    revoke: "Revoke", revoke_confirm: "Revoke the invitation for {name}? Their link stops working now.",
+    pick_one: "Choose at least one entity, or the whole panel.", no_name: "Write the guest's name.",
+    n_entities: "{n} entities",
     print_text: "Scan with your phone's camera while connected to the Wi‑Fi.",
   },
   es: {
@@ -34,6 +42,14 @@ const TEXT = {
     nfc_locked: "Listo, y el tag quedó bloqueado.", nfc_failed: "No se pudo escribir el tag: {error}",
     nfc_unsupported: "Este navegador no puede escribir tags NFC. Funciona en Chrome para Android con Home Assistant abierto por https (por ejemplo tu dirección de Home Assistant Cloud). Si no, copia el enlace y escríbelo como registro de tipo URL con una app como NFC Tools.",
     copy_link: "Copiar enlace",
+    invites: "Invitaciones", invites_help: "Un enlace para un invitado, con su nombre, lo que puede usar y cuánto dura. Puedes extender o anular cada una.",
+    guest_name: "Nombre del invitado", invite: "Invitar", whole: "Todo el panel de invitados", some: "Solo:",
+    valid_for: "Dura", h2: "2 horas", h6: "6 horas", d1: "1 día", d3: "3 días", w1: "1 semana", d30: "30 días",
+    expires_at: "Vence {when}", expired_at: "Venció {when}", never_used: "Sin usar todavía", used_at: "Último uso {when}",
+    by: "creada por {who}", show_qr: "Código QR", hide_qr: "Ocultar", extend: "Extender", extend_by: "Extender",
+    revoke: "Anular", revoke_confirm: "¿Anular la invitación de {name}? Su enlace deja de funcionar ahora.",
+    pick_one: "Elige al menos una entidad, o todo el panel.", no_name: "Escribe el nombre del invitado.",
+    n_entities: "{n} entidades",
     print_text: "Escanéalo con la cámara del teléfono, conectado al WiFi.",
   },
 };
@@ -107,6 +123,29 @@ class HaGuestInvitePanel extends HTMLElement {
         .code label input { flex: none; width: 18px; height: 18px; margin: 0; padding: 0; }
         .code .mini { align-self: flex-start; }
         .code .nfc-status { margin: 8px 0 0; font-size: 13px; color: var(--primary-text-color); }
+        .invites { margin-top: 40px; text-align: left; }
+        .invites h2 { font-size: 16px; margin: 0 0 4px; }
+        .invites > p { margin: 0 0 12px; font-size: 13px; }
+        .invites form { display: grid; gap: 10px; padding: 12px; border-radius: 16px; margin-bottom: 12px;
+          background: var(--card-background-color); border: 1px solid var(--divider-color); }
+        .invites form input[type=text], .invites select { width: 100%; box-sizing: border-box; margin: 0; padding: 10px;
+          border-radius: 10px; font: inherit; font-size: 15px; text-align: left; color: var(--primary-text-color);
+          background: var(--primary-background-color); border: 1px solid var(--divider-color); }
+        .invites .scope { display: grid; gap: 6px; font-size: 14px; }
+        .invites .scope label { display: flex; gap: 8px; align-items: center; }
+        .invites .scope input { flex: none; width: 18px; height: 18px; margin: 0; }
+        .invites .picks { display: grid; gap: 6px; padding-left: 26px; }
+        .invite-item { padding: 12px; margin-bottom: 12px; border-radius: 16px;
+          background: var(--card-background-color); border: 1px solid var(--divider-color); }
+        .invite-item.expired { opacity: .7; }
+        .invite-item strong { color: var(--primary-text-color); }
+        .invite-item p { margin: 4px 0 0; font-size: 13px; }
+        .invite-item .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+        .invite-item .buttons button { flex: none; min-height: 40px; padding: 0 14px; }
+        .invite-item .buttons select { width: auto; padding: 8px; }
+        .invite-item .qrbox { margin-top: 12px; text-align: center; }
+        .invite-item .qrbox .qr { max-width: 260px; margin: 0 auto; }
+        .form-error { color: var(--error-color, #b00020); font-size: 13px; margin: 0; }
       </style>
       <header><ha-menu-button></ha-menu-button><span class="title"></span></header>
       <main>
@@ -124,6 +163,20 @@ class HaGuestInvitePanel extends HTMLElement {
           <p class="note"></p>
         </div>
         <p class="failed when" hidden></p>
+        <section class="invites" hidden>
+          <h2></h2><p class="help"></p>
+          <form novalidate>
+            <input type="text" name="name" maxlength="60" autocomplete="off">
+            <select name="hours"></select>
+            <div class="scope">
+              <label><input type="checkbox" name="whole" checked><span class="whole-label"></span></label>
+              <div class="picks" hidden></div>
+            </div>
+            <p class="form-error" role="alert"></p>
+            <button type="submit"></button>
+          </form>
+          <div class="list"></div>
+        </section>
         <section class="codes" hidden><h2></h2><div class="list"></div></section>
       </main>`;
     const $ = (selector) => this.shadowRoot.querySelector(selector);
@@ -190,6 +243,7 @@ class HaGuestInvitePanel extends HTMLElement {
       $(".ready").hidden = false;
       $(".failed").hidden = true;
       this._showCodes(invite.codes || []);
+      this._loadInvitations();
     } catch (err) {
       $(".ready").hidden = true;
       $(".failed").hidden = false;
@@ -244,6 +298,159 @@ HaGuestInvitePanel.prototype._showCodes = function (codes) {
     info.append(name, days, buttons, lockLabel, status);
     row.append(mini, info);
     list.append(row);
+  }
+};
+
+const DURATIONS = [["h2", 2], ["h6", 6], ["d1", 24], ["d3", 72], ["w1", 168], ["d30", 720]];
+
+HaGuestInvitePanel.prototype._when = function (seconds) {
+  return new Date(seconds * 1000).toLocaleString(this._hass.language, { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+};
+
+HaGuestInvitePanel.prototype._loadInvitations = async function () {
+  const section = this.shadowRoot.querySelector(".invites");
+  if (!this._invitesReady) {
+    this._invitesReady = true;
+    this._setUpInviteForm(section);
+  }
+  try {
+    this._showInvitations(await this._hass.callWS({ type: "ha_guest/invitations" }));
+    section.hidden = false;
+  } catch (err) {
+    section.hidden = true;
+  }
+};
+
+HaGuestInvitePanel.prototype._setUpInviteForm = function (section) {
+  const t = this._t;
+  const form = section.querySelector("form");
+  section.querySelector("h2").textContent = t.invites;
+  section.querySelector(".help").textContent = t.invites_help;
+  form.name.placeholder = t.guest_name;
+  form.name.setAttribute("aria-label", t.guest_name);
+  form.hours.setAttribute("aria-label", t.valid_for);
+  for (const [key, hours] of DURATIONS) {
+    const option = document.createElement("option");
+    option.value = hours;
+    option.textContent = `${t.valid_for} ${t[key]}`;
+    form.hours.append(option);
+  }
+  form.hours.value = "24";
+  section.querySelector(".whole-label").textContent = t.whole;
+  form.whole.addEventListener("change", () => { section.querySelector(".picks").hidden = form.whole.checked; });
+  section.querySelector("button[type=submit]").textContent = t.invite;
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const error = section.querySelector(".form-error");
+    const name = form.name.value.trim();
+    const entities = form.whole.checked ? []
+      : [...section.querySelectorAll(".picks input:checked")].map((input) => input.value);
+    if (!name) { error.textContent = t.no_name; return; }
+    if (!form.whole.checked && !entities.length) { error.textContent = t.pick_one; return; }
+    error.textContent = "";
+    try {
+      const data = await this._hass.callWS({ type: "ha_guest/invitations/create", name, entities, hours: Number(form.hours.value) });
+      form.name.value = "";
+      this._openRef = data.invitations[0] && data.invitations[0].ref; // show the new one's QR straight away
+      this._showInvitations(data);
+    } catch (err) {
+      error.textContent = t[err.code] || t.error;
+    }
+  });
+};
+
+HaGuestInvitePanel.prototype._showInvitations = function (data) {
+  const t = this._t;
+  const section = this.shadowRoot.querySelector(".invites");
+  const names = Object.fromEntries(data.entities.map((e) => [e.entity_id, e.name]));
+  const picks = section.querySelector(".picks");
+  const chosen = new Set([...picks.querySelectorAll("input:checked")].map((input) => input.value));
+  picks.replaceChildren(...data.entities.map((e) => {
+    const label = document.createElement("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.value = e.entity_id;
+    box.checked = chosen.has(e.entity_id);
+    label.append(box, document.createTextNode(e.name));
+    return label;
+  }));
+
+  const list = section.querySelector(".list");
+  list.replaceChildren();
+  for (const item of data.invitations) {
+    const expired = item.expires <= data.now;
+    const card = document.createElement("div");
+    card.className = "invite-item" + (expired ? " expired" : "");
+    const line = (text) => { const p = document.createElement("p"); p.textContent = text; return p; };
+    const title = document.createElement("strong");
+    title.textContent = item.name;
+    const scope = item.entities.length
+      ? (item.entities.length <= 3 ? item.entities.map((id) => names[id] || id).join(", ") : t.n_entities.replace("{n}", item.entities.length))
+      : t.whole;
+    card.append(
+      title,
+      line((expired ? t.expired_at : t.expires_at).replace("{when}", this._when(item.expires))),
+      line(scope),
+      line([item.last_used ? t.used_at.replace("{when}", this._when(item.last_used)) : t.never_used,
+        item.created_by ? t.by.replace("{who}", item.created_by) : ""].filter(Boolean).join(" · ")),
+    );
+
+    const buttons = document.createElement("div");
+    buttons.className = "buttons";
+    const button = (text, onClick, plain = true) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      if (plain) b.className = "plain";
+      b.textContent = text;
+      b.addEventListener("click", onClick);
+      return b;
+    };
+    const qrbox = document.createElement("div");
+    qrbox.className = "qrbox";
+    qrbox.hidden = this._openRef !== item.ref || expired;
+    if (!expired) {
+      const qr = document.createElement("div");
+      qr.className = "qr";
+      qr.setAttribute("role", "img");
+      qr.setAttribute("aria-label", t.qr);
+      qr.innerHTML = item.svg; // produced by this integration's backend
+      const status = line("");
+      status.setAttribute("role", "status");
+      const share = button(navigator.share ? t.share : t.copy_link, async () => {
+        if (navigator.share) {
+          try { await navigator.share({ title: item.name, text: t.share_text, url: item.url }); } catch (err) { /* closed */ }
+        } else {
+          status.textContent = (await this._copyText(item.url)) ? t.copied : item.url;
+        }
+      }, false);
+      qrbox.append(qr, share, status);
+      const toggle = button(qrbox.hidden ? t.show_qr : t.hide_qr, () => {
+        qrbox.hidden = !qrbox.hidden;
+        toggle.textContent = qrbox.hidden ? t.show_qr : t.hide_qr;
+        this._openRef = qrbox.hidden ? null : item.ref;
+      });
+      buttons.append(toggle);
+    }
+    const by = document.createElement("select");
+    by.setAttribute("aria-label", t.extend_by);
+    for (const [key, hours] of DURATIONS) {
+      const option = document.createElement("option");
+      option.value = hours;
+      option.textContent = `+${t[key]}`;
+      by.append(option);
+    }
+    by.value = "24";
+    buttons.append(
+      by,
+      button(t.extend, async () => this._showInvitations(
+        await this._hass.callWS({ type: "ha_guest/invitations/extend", ref: item.ref, hours: Number(by.value) }))),
+      button(t.revoke, async () => {
+        if (!confirm(t.revoke_confirm.replace("{name}", item.name))) return;
+        this._showInvitations(await this._hass.callWS({ type: "ha_guest/invitations/revoke", ref: item.ref }));
+      }),
+    );
+    card.append(buttons, qrbox);
+    list.append(card);
   }
 };
 

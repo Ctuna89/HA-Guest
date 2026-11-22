@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.0 — 2026-11-22
+
+- **Named invitations** on the **Guest QR** page: a link for one guest with their name, how long it lasts (2 hours
+  to 30 days) and what they can use (the whole panel or some of its entities). The list shows expiry, last use and
+  who created each one; **Extend** keeps the same link, and **Revoke** ends it at once. Anyone in the household can
+  manage them, only with entities already on the guest panel.
+- **Live updates:** guests see changes within a second instead of every few seconds, and the page no longer polls
+  while nothing happens. Access is re-checked continuously, so a revoked or expired guest is cut off at once.
+- **Install on the home screen:** guests can add the panel to their phone and open it like an app, keeping their link.
+- **Security:** a strict, nonce-based Content Security Policy on the guest page; `nosniff`, `no-referrer` and
+  `no-store` on every response; at most 30 actions a minute per guest and 10 code redemptions a minute per address.
+- **Message for expired links:** set your own text under *Guest panel appearance*, for example how to ask for a new one.
+- **More controls:** fan speed, lock unlatch where supported, and a volume slider for media players.
+- The README warns that a scene or script runs everything it contains, whatever entities guests see.
+
+Thanks to @rohithkadaveru, whose [HAPass](https://github.com/rohithkadaveru/ha-pass) inspired most of this release.
+
 ## 0.8.1 — 2026-11-22
 
 - **NFC tags for permanent codes:** on the **Guest QR** page, each permanent code can be written to an NFC tag, so
