@@ -26,7 +26,7 @@ from .permissions import GuestUserManager, async_release_users
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-PLATFORMS = [Platform.BINARY_SENSOR, Platform.SWITCH]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.IMAGE, Platform.SWITCH]
 
 type GuestConfigEntry = ConfigEntry[GuestRuntime]
 

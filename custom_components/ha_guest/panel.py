@@ -298,12 +298,17 @@ def background_url(value: Any) -> str | None:
     return value if SAFE_URL.match(value) else None
 
 
-async def async_state_labels(hass: HomeAssistant, states: list[State]) -> dict[str, str]:
-    """Each state in Home Assistant's own words and language («Inactivo», «Despejado, de noche»...)."""
+LANGUAGE_SHAPE = re.compile(r"^[a-z]{2}(-[A-Za-z]{2,4})?$")
+
+
+async def async_state_labels(hass: HomeAssistant, states: list[State], language: str | None = None) -> dict[str, str]:
+    """Each state in Home Assistant's own words («Inactivo», «Despejado, de noche»...), in the guest's language
+    when Home Assistant has it, else in Home Assistant's own."""
     registry = er.async_get(hass)
     domains = {state.domain for state in states}
     platforms = {entry.platform for state in states if (entry := registry.async_get(state.entity_id))}
-    language = hass.config.language or "en"
+    if not language or not LANGUAGE_SHAPE.match(language):
+        language = hass.config.language or "en"
     component = await async_get_translations(hass, language, "entity_component", domains)
     entity = await async_get_translations(hass, language, "entity", platforms) if platforms else {}
     labels = {}
@@ -382,7 +387,7 @@ async def async_allowed_entities(hass: HomeAssistant, conf: dict[str, Any], gues
 
 
 async def async_build_sections(
-    hass: HomeAssistant, conf: dict[str, Any], guest: Guest | None = None
+    hass: HomeAssistant, conf: dict[str, Any], guest: Guest | None = None, language: str | None = None
 ) -> list[dict[str, Any]]:
     """The page content: the chosen dashboard, the owner's layout, or the allowed entities grouped by area."""
     appearance = conf.get(CONF_APPEARANCE, {})
@@ -418,7 +423,7 @@ async def async_build_sections(
         plan = [*plan, *extra.items()]
 
     states = [s for _, items in plan for item in items if (s := hass.states.get(item.get("entity") or ""))]
-    labels = await async_state_labels(hass, states)
+    labels = await async_state_labels(hass, states, language)
     sections = []
     for title, items in plan:
         entities = []
@@ -594,7 +599,7 @@ class GuestStatesView(_GuestView):
                 "accent": appearance.get(CONF_ACCENT) or None,
                 "welcome": appearance.get(CONF_WELCOME) or "",
             },
-            "sections": await async_build_sections(hass, conf, guest),
+            "sections": await async_build_sections(hass, conf, guest, request.query.get("lang")),
         })
 
 

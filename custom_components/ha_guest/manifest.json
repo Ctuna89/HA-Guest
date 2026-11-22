@@ -1,7 +1,7 @@
 {
   "domain": "ha_guest",
   "name": "HA Guest",
-  "after_dependencies": ["cloud"],
+  "after_dependencies": ["cloud", "image"],
   "codeowners": ["@Ctuna89"],
   "config_flow": true,
   "dependencies": ["frontend", "http", "websocket_api"],

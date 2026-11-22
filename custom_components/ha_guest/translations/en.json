@@ -244,6 +244,11 @@
       "in_use": {
         "name": "In use"
       }
+    },
+    "image": {
+      "qr": {
+        "name": "QR code"
+      }
     }
   },
   "device": {

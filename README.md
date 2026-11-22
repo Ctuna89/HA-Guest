@@ -58,6 +58,9 @@ The page updates live: when something changes in the house, guests see it within
 panel to their phone's home screen (*Share → Add to Home Screen* on iPhone, *⋮ → Add to Home screen* or
 *Install* on Android) and open it like an app; it keeps their link.
 
+The page speaks the guest's language: Spanish, English, French, German, Italian, Portuguese or Dutch, from their
+phone's settings (English for any other). Entity states use Home Assistant's own words in that language.
+
 Guests open `http://<home-assistant-ip>:8123/guest`. The easiest way is to leave a QR code with that address.
 From any other network the page only shows «Connect to the home Wi-Fi» along with the IP address Home Assistant
 sees, which helps when adjusting the allowed networks.
@@ -210,15 +213,48 @@ For someone specific, such as a friend staying the weekend or a cleaner every Tu
   or only some of its entities.
 - Share it as a QR code or a link. Everything they do is logged under their name («Pedro (192.168.1.20) turned off
   Living room lights»).
-- The list shows when each invitation expires, when it was last used and who created it. **Extend** adds time
-  without changing the link they already have (also for one that just expired), and **Revoke** ends it at once,
-  even on a page that is open.
+- **Starts** (optional): it only works from then on, for example check-in. Before that the guest sees when it
+  starts. The duration counts from the start.
+- **Only while** a schedule or input boolean helper is on, for example a «Cleaning» schedule on Tuesdays from 9 to
+  13. Outside it the guest sees that they have no access right now.
+- **Only one phone:** the first phone that opens the link keeps it, and the same link forwarded to anyone else
+  says it was already opened on another phone. **Free the phone** lets them open it on a new one. This stops casual
+  forwarding, not a guest determined to share their own phone's link.
+- The list shows when each invitation starts and expires, when it was last used and who created it. **Extend**
+  adds time without changing the link they already have (also for one that just expired), and **Revoke** ends it
+  at once, even on a page that is open.
 
 Anyone in the household can create, extend and revoke invitations, but only with entities already on the guest
 panel. Restricted users cannot. Invitations are not tied to the link duration in the panel settings; expired ones
 stay listed for a week so you can extend them.
 
 <img src="docs/guest-invitations.png" alt="Named invitations on the Guest QR page" width="320">
+
+### Invitations from automations
+
+Three actions let automations manage invitations, for example for holiday rentals:
+
+- **`ha_guest.create_invitation`**: `name`, and optionally `entities`, `starts`, `duration` or `ends`,
+  `condition_entity` and `single_device`. It returns the invitation's `url`, its id and its dates.
+- **`ha_guest.extend_invitation`**: `invitation` (its id or name) and `duration`.
+- **`ha_guest.revoke_invitation`**: `invitation` (its id or name).
+
+```yaml
+# When a booking arrives: an invitation from check-in to check-out, sent to your phone.
+actions:
+  - action: ha_guest.create_invitation
+    data:
+      name: "Booking {{ trigger.event.data.code }}"
+      starts: "{{ trigger.event.data.check_in }}"
+      ends: "{{ trigger.event.data.check_out }}"
+      single_device: true
+    response_variable: invitation
+  - action: notify.mobile_app_my_phone
+    data:
+      message: "Guest link for {{ invitation.name }}: {{ invitation.url }}"
+```
+
+Dates without a time zone are in Home Assistant's. Entities must be on the guest panel.
 
 ### Permanent QR codes (a code on the nightstand)
 
@@ -284,6 +320,10 @@ The integration adds two entities on a «Guest panel» device:
   automation (e.g. off when the alarm is armed); it keeps its state across restarts.
 - **`binary_sensor.guest_panel_in_use`**: on while a guest has the panel open or used it in the last 5 minutes,
   with the number of `guests` and `last_seen` as attributes.
+- **`image.guest_panel_qr_code`**: a QR code with a quick link to the whole guest panel, for a dashboard on a wall
+  tablet by the door. It renews itself at half the link duration, so whoever scans it always gets at least half;
+  with a duration of 0 it is the plain panel address. Anyone who can see the tablet can scan it, so put it where
+  only people inside the house can.
 
 The entity ids above are for an English Home Assistant; they follow its language when the integration is added.
 
@@ -357,6 +397,11 @@ ideas in HA Guest 0.9.0 come from it: named invitations that can be extended or 
 installing the guest panel on the home screen, rate limiting, strict security headers, a custom message for
 expired links, and fan speed, lock unlatch and volume controls. If you prefer an add-on with links that also work
 outside your home network, give it a look.
+
+Thanks also to [@Darkdragon14](https://github.com/Darkdragon14) for
+[Guest Mode](https://github.com/Darkdragon14/ha-guest-mode), which logs guests into Home Assistant itself with a
+temporary link. HA Guest 0.10.0 takes from it the actions for automations, invitations that start later or only
+work while a schedule or helper is on, the QR code image entity, and more languages.
 
 ## Development
 

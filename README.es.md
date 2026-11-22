@@ -60,6 +60,10 @@ La página se actualiza en vivo: cuando algo cambia en la casa, el invitado lo v
 puede agregar el panel a la pantalla de inicio del teléfono (*Compartir → Agregar a inicio* en iPhone, *⋮ → Agregar
 a la pantalla principal* o *Instalar* en Android) y abrirlo como una app; conserva su enlace.
 
+La página habla el idioma del invitado: español, inglés, francés, alemán, italiano, portugués u holandés, según la
+configuración de su teléfono (inglés para cualquier otro). Los estados de las entidades usan las palabras de Home
+Assistant en ese idioma.
+
 El invitado entra a `http://<ip-de-home-assistant>:8123/guest`. Lo más cómodo es dejar un código QR con esa
 dirección. Desde otra red, la página solo muestra «Conéctate al WiFi de la casa» junto a la dirección IP que
 Home Assistant ve, lo que sirve para ajustar las redes permitidas.
@@ -213,15 +217,48 @@ invitación en la página **Guest QR** en vez de un enlace rápido:
   invitados, o solo algunas de sus entidades.
 - Compártela como código QR o como enlace. Todo lo que haga queda registrado con su nombre («Pedro (192.168.1.20)
   apagó Luces del living»).
-- La lista muestra cuándo vence cada invitación, cuándo se usó por última vez y quién la creó. **Extender** agrega
-  tiempo sin cambiar el enlace que ya tiene (también a una recién vencida), y **Anular** la termina al instante,
-  incluso con la página abierta.
+- **Empieza** (opcional): solo funciona desde ese momento, por ejemplo el check-in. Antes, el invitado ve cuándo
+  empieza. La duración se cuenta desde el inicio.
+- **Solo mientras** un ayudante de horario o booleano esté encendido, por ejemplo un horario «Aseo» los martes de 9
+  a 13. Fuera de él, el invitado ve que ahora no tiene acceso.
+- **Solo un teléfono:** el primer teléfono que abre el enlace se queda con él, y el mismo enlace reenviado a otra
+  persona dice que ya se abrió en otro teléfono. **Liberar teléfono** permite abrirlo en uno nuevo. Esto frena el
+  reenvío casual, no a un invitado decidido a compartir el enlace de su propio teléfono.
+- La lista muestra cuándo empieza y vence cada invitación, cuándo se usó por última vez y quién la creó.
+  **Extender** agrega tiempo sin cambiar el enlace que ya tiene (también a una recién vencida), y **Anular** la
+  termina al instante, incluso con la página abierta.
 
 Cualquiera de la casa puede crear, extender y anular invitaciones, pero solo con entidades que ya estén en el panel
 de invitados. Los usuarios restringidos no pueden. Las invitaciones no dependen de la duración de enlaces del panel;
 las vencidas siguen en la lista una semana para poder extenderlas.
 
 <img src="docs/guest-invitations.png" alt="Invitaciones con nombre en la página Guest QR" width="320">
+
+### Invitaciones desde automatizaciones
+
+Tres acciones permiten que las automatizaciones manejen invitaciones, por ejemplo para arriendos por días:
+
+- **`ha_guest.create_invitation`**: `name`, y opcionalmente `entities`, `starts`, `duration` o `ends`,
+  `condition_entity` y `single_device`. Devuelve la `url` de la invitación, su id y sus fechas.
+- **`ha_guest.extend_invitation`**: `invitation` (su id o su nombre) y `duration`.
+- **`ha_guest.revoke_invitation`**: `invitation` (su id o su nombre).
+
+```yaml
+# Al llegar una reserva: una invitación del check-in al check-out, enviada a tu teléfono.
+actions:
+  - action: ha_guest.create_invitation
+    data:
+      name: "Reserva {{ trigger.event.data.code }}"
+      starts: "{{ trigger.event.data.check_in }}"
+      ends: "{{ trigger.event.data.check_out }}"
+      single_device: true
+    response_variable: invitation
+  - action: notify.mobile_app_mi_telefono
+    data:
+      message: "Enlace de invitado para {{ invitation.name }}: {{ invitation.url }}"
+```
+
+Las fechas sin zona horaria se toman en la de Home Assistant. Las entidades deben estar en el panel de invitados.
 
 ### QR fijos (un código en el velador)
 
@@ -291,6 +328,10 @@ La integración agrega dos entidades en un dispositivo «Panel de invitados»:
   (p. ej. apagarlo al armar la alarma); conserva su estado al reiniciar.
 - **`binary_sensor.guest_panel_in_use`**: encendido mientras un invitado tiene el panel abierto o lo usó en los
   últimos 5 minutos, con la cantidad de invitados (`guests`) y `last_seen` como atributos.
+- **`image.guest_panel_qr_code`**: un código QR con un enlace rápido a todo el panel de invitados, para un dashboard
+  en una tablet en la entrada. Se renueva solo a la mitad de la duración del enlace, así quien lo escanea siempre
+  tiene al menos la mitad; con duración 0 es la dirección del panel a secas. Cualquiera que vea la tablet puede
+  escanearlo, así que ponla donde solo llegue gente que ya está dentro de la casa.
 
 Los nombres de estas entidades dependen del idioma de tu Home Assistant al instalar la integración.
 
@@ -367,6 +408,12 @@ anular una por una, actualización en vivo, instalar el panel de invitados en la
 acciones, cabeceras de seguridad estrictas, un mensaje propio para enlaces vencidos, y los controles de velocidad
 del ventilador, pestillo de cerraduras y volumen. Si prefieres un complemento con enlaces que también funcionen fuera
 de tu red, vale la pena mirarlo.
+
+Gracias también a [@Darkdragon14](https://github.com/Darkdragon14) por
+[Guest Mode](https://github.com/Darkdragon14/ha-guest-mode), que inicia sesión en el propio Home Assistant con un
+enlace temporal. HA Guest 0.10.0 toma de ahí las acciones para automatizaciones, las invitaciones que empiezan más
+tarde o que solo funcionan mientras un horario o ayudante está encendido, la entidad de imagen con el código QR y
+más idiomas.
 
 ## Desarrollo
 

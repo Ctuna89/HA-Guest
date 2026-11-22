@@ -1073,3 +1073,37 @@ async def test_single_phone_invitation(hass, hass_client_no_auth, hass_ws_client
     assert listed["device"] is False and listed["single_device"] is True
     assert (await http.get("/api/ha_guest/states", headers=phone)).status == 403
     assert (await http.post("/api/ha_guest/claim", json={}, headers=link)).status == 200
+
+
+
+async def test_qr_image_for_a_wall_tablet(hass, hass_client, hass_client_no_auth, entity_registry, freezer):
+    """An image entity with a quick link that works, renewed at half its life."""
+    entry = await _setup(hass, panel={"link_hours": 2})
+    image = _entity(entity_registry, entry, "image", "qr")
+    state = hass.states.get(image)
+    first = state.attributes["expires"]
+    client = await hass_client()
+    res = await client.get(f"/api/image_proxy/{image}?token={state.attributes['access_token']}")
+    assert res.status == 200 and res.headers["Content-Type"] == "image/png"
+    assert (await res.read()).startswith(b"\x89PNG")
+
+    freezer.tick(timedelta(hours=1, seconds=1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert hass.states.get(image).attributes["expires"] > first
+
+
+
+async def test_states_in_the_guests_language(hass, hass_client_no_auth):
+    hass.config.language = "es"
+    hass.states.async_set("media_player.sonos", "idle", {"friendly_name": "Sonos"})
+    await _setup(hass, panel={"entities": ["media_player.sonos"]})
+    http = await hass_client_no_auth()
+
+    async def label(query=""):
+        data = await (await http.get(f"/api/ha_guest/states{query}")).json()
+        return data["sections"][0]["entities"][0]["state_label"]
+
+    assert await label() == "Inactivo"  # Home Assistant's language
+    assert await label("?lang=de") == "Leerlauf"
+    assert await label("?lang=not_a_language") == "Inactivo"
