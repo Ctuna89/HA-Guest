@@ -162,6 +162,8 @@ LAYOUT_SCHEMA = vol.Schema([{
         },
     )],
 }])
+# Home Assistant does not allow addresses inside translated texts; the example goes in as a placeholder.
+GUEST_URL_EXAMPLE = {"example": "https://guests.example.com"}
 HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 # States that mean «home» for entities that are not a Wi-Fi name sensor.
 HOME_BY_DOMAIN = {"device_tracker": "home", "person": "home", "binary_sensor": "on", "input_boolean": "on"}
@@ -199,6 +201,7 @@ class GuestConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user", errors=errors,
             data_schema=self.add_suggested_values_to_schema(panel_schema(self.hass), suggested),
+            description_placeholders=GUEST_URL_EXAMPLE,
         )
 
     @staticmethod
@@ -244,6 +247,7 @@ class GuestOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="panel", errors=errors,
             data_schema=self.add_suggested_values_to_schema(panel_schema(self.hass), suggested),
+            description_placeholders=GUEST_URL_EXAMPLE,
         )
 
     async def async_step_appearance(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
