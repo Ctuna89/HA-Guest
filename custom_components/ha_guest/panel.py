@@ -34,6 +34,8 @@ from .const import (
     CONF_APPEARANCE,
     CONF_BACKGROUND,
     CONF_EXPIRED_MESSAGE,
+    CONF_GUEST_URL,
+    CONF_PUBLIC_IP_ENTITY,
     CONF_LAYOUT,
     CONF_MODE,
     CONF_SHOW_ICONS,
@@ -220,28 +222,57 @@ def panel_config(hass: HomeAssistant) -> tuple[GuestRuntime, dict[str, Any]] | N
     return None
 
 
-def network_allowed(hass: HomeAssistant, request: web.Request, conf: dict[str, Any]) -> bool:
+def network_allowed(hass: HomeAssistant, request: web.Request, conf: dict[str, Any]) -> str | None:
+    """How the guest is connected: «lan» from an allowed network, «public» from the home's own public address
+    (reaching Home Assistant through the owner's domain or tunnel), or None.
+
+    Home Assistant Cloud is always refused: there every visitor looks like 127.0.0.1.
+    """
     if is_cloud_connection(hass) or request.remote is None:
-        return False
+        return None
     try:
         address = ip_address(request.remote)
     except ValueError:
-        return False
+        return None
     if mapped := getattr(address, "ipv4_mapped", None):
         address = mapped
     for network in conf.get(CONF_NETWORKS, []):
         try:
             if address in ip_network(network, strict=False):
-                return True
+                return "lan"
         except ValueError:
             continue
-    return False
+    if (home := home_public_address(hass, conf)) is not None and proxies_are_safe(hass):
+        if home.version == 4 and address == home:
+            return "public"
+        # Every device has its own IPv6 address; the home's addresses share a /56 prefix.
+        if home.version == 6 and address.version == 6 and address in ip_network(f"{home}/56", strict=False):
+            return "public"
+    return None
+
+
+def home_public_address(hass: HomeAssistant, conf: dict[str, Any]) -> Any:
+    """The home's public address, from the sensor the owner chose (for example DNS IP's), if it holds one."""
+    if not (entity_id := conf.get(CONF_PUBLIC_IP_ENTITY)) or (state := hass.states.get(entity_id)) is None:
+        return None
+    try:
+        address = ip_address(state.state.strip())
+    except ValueError:
+        return None
+    return address if address.is_global else None
+
+
+def proxies_are_safe(hass: HomeAssistant) -> bool:
+    """Whether a visitor's address can be trusted: Home Assistant only takes it from X-Forwarded-For when the
+    request comes from a trusted proxy, so a trusted range that includes the internet would let anyone forge it."""
+    proxies = getattr(getattr(hass, "http", None), "trusted_proxies", None) or []
+    return all(network.is_private or network.is_loopback for network in proxies)
 
 
 LOCAL_NAMES = {"localhost", "homeassistant", "homeassistant.local"}
 
 
-def host_allowed(hass: HomeAssistant, request: web.Request) -> bool:
+def host_allowed(hass: HomeAssistant, request: web.Request, conf: dict[str, Any] | None = None) -> bool:
     """The page was reached through Home Assistant's own address, not through some other website's name.
 
     Without this, a website opened by any device on the home network could point its own domain name at Home
@@ -264,8 +295,9 @@ def host_allowed(hass: HomeAssistant, request: web.Request) -> bool:
         return True
     if host in LOCAL_NAMES or host.endswith(".local"):
         return True
+    guest_url = (conf or {}).get(CONF_GUEST_URL)
     configured = {
-        (URL(url).host or "").lower() for url in (hass.config.internal_url, hass.config.external_url) if url
+        (URL(url).host or "").lower() for url in (hass.config.internal_url, hass.config.external_url, guest_url) if url
     }
     return host in configured
 
@@ -486,19 +518,22 @@ class _GuestView(HomeAssistantView):
 
     def _place(
         self, request: web.Request
-    ) -> tuple[HomeAssistant, dict[str, Any], GuestRuntime] | web.Response:
-        """The checks that do not depend on a link: panel on, Home Assistant's own address, allowed network."""
+    ) -> tuple[HomeAssistant, dict[str, Any], GuestRuntime, str] | web.Response:
+        """The checks that do not depend on a link: panel on, Home Assistant's own address, allowed network.
+
+        Returns how the guest is connected as well: «lan» or «public» (see network_allowed).
+        """
         hass = request.app["hass"]
         found = panel_config(hass)
         if found is None:
             return self.json({"error": "disabled"}, HTTPStatus.NOT_FOUND)
         runtime, conf = found
-        if not host_allowed(hass, request):
+        if not host_allowed(hass, request, conf):
             return self.json({"error": "host"}, HTTPStatus.FORBIDDEN)
-        if not network_allowed(hass, request, conf):
+        if (via := network_allowed(hass, request, conf)) is None:
             # The caller's own address helps the owner work out which network to allow.
             return self.json({"error": "network", "ip": request.remote}, HTTPStatus.FORBIDDEN)
-        return hass, conf, runtime
+        return hass, conf, runtime, via
 
     def _guard(
         self, request: web.Request
@@ -507,7 +542,7 @@ class _GuestView(HomeAssistantView):
         place = self._place(request)
         if isinstance(place, web.Response):
             return place
-        hass, conf, runtime = place
+        hass, conf, runtime, via = place
         guest = Guest(ip=str(request.remote))
         lifetime = link_seconds(conf)
         codes = conf.get(CONF_CODES, {})
@@ -531,8 +566,10 @@ class _GuestView(HomeAssistantView):
                     return refused
                 scope = tuple(item.get("entities") or ()) or None
                 guest = Guest(ip=guest.ip, link=link, expires=expires, code=item["name"], scope=scope, invite=ref)
-        elif lifetime:
-            # Opening the bare address is ordinary; presenting a link that no longer works is worth reporting.
+        elif lifetime or via == "public":
+            # Through the home's public address a link is always required, even with a link duration of 0: other
+            # people can share that address (a provider's CGNAT). Opening the bare address is ordinary; presenting
+            # a link that no longer works is worth reporting.
             if token:
                 runtime.async_blocked(guest, "link")
             return self.json(self._link_error(conf), HTTPStatus.FORBIDDEN)
@@ -668,7 +705,7 @@ class GuestClaimView(_GuestView):
         place = self._place(request)
         if isinstance(place, web.Response):
             return place
-        _, conf, runtime = place
+        _, conf, runtime, _via = place
         if not runtime.allow(f"claim:{request.remote}", CLAIMS_PER_MINUTE):
             return self.json({"error": "rate"}, HTTPStatus.TOO_MANY_REQUESTS)
         if request.content_type != "application/json":
@@ -694,7 +731,7 @@ class GuestRedeemView(_GuestView):
         place = self._place(request)
         if isinstance(place, web.Response):
             return place
-        _, conf, runtime = place
+        _, conf, runtime, _via = place
         if not runtime.allow(f"redeem:{request.remote}", REDEEMS_PER_MINUTE):
             return self.json({"error": "rate"}, HTTPStatus.TOO_MANY_REQUESTS)
         if request.content_type != "application/json":

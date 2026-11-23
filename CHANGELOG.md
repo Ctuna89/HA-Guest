@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.9.2 — 2026-11-23
+
+For guest Wi-Fi networks that are isolated from the home network, where guests cannot reach Home Assistant's
+`:8123` address.
+
+- **Guest address:** links, invitations, permanent codes and the QR image can point to another address, such as a
+  reverse proxy that only exposes the guest panel's paths, or your own domain. The README has an NGINX example.
+- **Also allow the home's public address:** guests whose address matches your home's public IP (from a sensor you
+  choose, such as DNS IP's) are accepted when they come in through your domain or tunnel.
+
+Risks of the public-address option, also spelled out in the settings and the README:
+
+- The guest panel becomes reachable from the internet; everyone else is refused by address.
+- With shared public IPs (CGNAT), strangers can have your address, so this way a valid link is always required,
+  even with a link duration of 0.
+- It is switched off, and refused by the settings form, when `trusted_proxies` includes internet addresses, since
+  anyone could then fake their address.
+- It never works through Home Assistant Cloud (Nabu Casa), where every visitor looks like `127.0.0.1`.
+- If the sensor stops reporting a public address, the option stops letting anyone in.
+
 ## 0.9.1 — 2026-11-22
 
 - **Actions for automations:** `ha_guest.create_invitation` (returns the invitation's link and dates),

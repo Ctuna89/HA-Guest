@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from ipaddress import ip_network
+from ipaddress import ip_address, ip_network
 import re
 from typing import Any
 
 import voluptuous as vol
+from yarl import URL
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
@@ -20,6 +21,8 @@ from .const import (
     CONF_AWAY_READ,
     CONF_BACKGROUND,
     CONF_EXPIRED_MESSAGE,
+    CONF_GUEST_URL,
+    CONF_PUBLIC_IP_ENTITY,
     CONF_CONDITION_ENTITY,
     CONF_CONDITION_STATES,
     CONF_ENABLED,
@@ -63,7 +66,7 @@ from .const import (
     SOURCE_ENTITIES,
 )
 from .dashboard import async_dashboard_plan, dashboard_options
-from .panel import background_url
+from .panel import background_url, proxies_are_safe
 from .invite import new_code, new_secret
 
 ENTITIES = selector.EntitySelector(selector.EntitySelectorConfig(multiple=True))
@@ -89,6 +92,8 @@ def panel_schema(hass: HomeAssistant) -> vol.Schema:
         vol.Required(CONF_LINK_HOURS, default=DEFAULT_LINK_HOURS): selector.NumberSelector(
             selector.NumberSelectorConfig(min=0, max=720, step=0.5, unit_of_measurement="h", mode=selector.NumberSelectorMode.BOX)
         ),
+        vol.Optional(CONF_GUEST_URL): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.URL)),
+        vol.Optional(CONF_PUBLIC_IP_ENTITY): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
     })
 
 
@@ -100,6 +105,26 @@ async def _async_check_panel(hass: HomeAssistant, user_input: dict[str, Any]) ->
         panel[CONF_NETWORKS] = networks
     else:
         errors[CONF_NETWORKS] = "invalid_network"
+    if guest_url := (panel.get(CONF_GUEST_URL) or "").strip():
+        url = URL(guest_url)
+        if url.scheme not in ("http", "https") or not url.host or url.path not in ("", "/") or url.query_string:
+            errors[CONF_GUEST_URL] = "invalid_guest_url"
+        else:
+            panel[CONF_GUEST_URL] = str(url.origin())
+    else:
+        panel.pop(CONF_GUEST_URL, None)
+    if entity_id := panel.get(CONF_PUBLIC_IP_ENTITY):
+        state = hass.states.get(entity_id)
+        try:
+            public = ip_address(state.state.strip()) if state else None
+        except ValueError:
+            public = None
+        if public is None or not public.is_global:
+            errors[CONF_PUBLIC_IP_ENTITY] = "not_public_ip"
+        elif not proxies_are_safe(hass):
+            errors[CONF_PUBLIC_IP_ENTITY] = "unsafe_proxies"
+    else:
+        panel.pop(CONF_PUBLIC_IP_ENTITY, None)
     if panel.get(CONF_SOURCE) == SOURCE_DASHBOARD:
         if not panel.get(CONF_DASHBOARD):
             errors[CONF_DASHBOARD] = "no_dashboard"
@@ -137,6 +162,8 @@ LAYOUT_SCHEMA = vol.Schema([{
         },
     )],
 }])
+# Home Assistant does not allow addresses inside translated texts; the example goes in as a placeholder.
+GUEST_URL_EXAMPLE = {"example": "https://guests.example.com"}
 HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 # States that mean «home» for entities that are not a Wi-Fi name sensor.
 HOME_BY_DOMAIN = {"device_tracker": "home", "person": "home", "binary_sensor": "on", "input_boolean": "on"}
@@ -174,6 +201,7 @@ class GuestConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user", errors=errors,
             data_schema=self.add_suggested_values_to_schema(panel_schema(self.hass), suggested),
+            description_placeholders=GUEST_URL_EXAMPLE,
         )
 
     @staticmethod
@@ -219,6 +247,7 @@ class GuestOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="panel", errors=errors,
             data_schema=self.add_suggested_values_to_schema(panel_schema(self.hass), suggested),
+            description_placeholders=GUEST_URL_EXAMPLE,
         )
 
     async def async_step_appearance(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:

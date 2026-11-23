@@ -68,6 +68,65 @@ El invitado entra a `http://<ip-de-home-assistant>:8123/guest`. Lo más cómodo 
 dirección. Desde otra red, la página solo muestra «Conéctate al WiFi de la casa» junto a la dirección IP que
 Home Assistant ve, lo que sirve para ajustar las redes permitidas.
 
+### Cuando el WiFi de invitados está aislado de tu red
+
+Muchos routers separan el WiFi de invitados de la red de la casa, así que el teléfono del invitado no llega a
+`http://<ip-de-home-assistant>:8123`: la página simplemente no carga. Hay tres formas de resolverlo. Cada una abre un
+poco más que lo predeterminado, así que elige la primera que te sirva.
+
+**1. Permitir que la red de invitados llegue a la red de la casa** (ajuste del router). Luego agrega la red de
+invitados a *Redes permitidas*. Es lo más simple, pero los invitados también podrán llegar a los otros equipos de la
+casa.
+
+**2. Un proxy inverso que solo expone el panel de invitados** (lo que la mayoría quiere). Usa un proxy al que los
+invitados lleguen (en el router, un NAS u otro equipo) y reenvía a Home Assistant solo estas rutas: `/guest`,
+`/api/ha_guest/`, `/ha_guest_static/` (y `/local/` si tu foto de fondo está ahí). Después:
+
+- en la configuración del panel de invitados, pon en **Dirección para invitados** la dirección del proxy, así los
+  enlaces y QR apuntan a él;
+- en el ajuste `http:` de Home Assistant, activa `use_x_forwarded_for` y pon en `trusted_proxies` **solo la
+  dirección del propio proxy**;
+- agrega la red de invitados a *Redes permitidas* (el proxy entrega la dirección de cada invitado).
+
+```nginx
+server {
+  listen 8124;  # alcanzable desde el WiFi de invitados
+  location ~ ^/(guest$|api/ha_guest/|ha_guest_static/) {
+    proxy_pass http://192.168.1.10:8123;  # Home Assistant
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_http_version 1.1;
+    proxy_buffering off;  # actualización en vivo
+  }
+  location / { return 404; }  # nada más de Home Assistant
+}
+```
+
+**3. Tu propio dominio más la IP pública de la casa.** Si Home Assistant ya es accesible por tu propio dominio (un
+Cloudflare Tunnel o un proxy inverso con reenvío de puertos), pon ese dominio en **Dirección para invitados** y elige
+un sensor con la IP pública de tu casa en **Permitir también la IP pública de la casa** (la integración DNS IP
+entrega uno). Los invitados cuya dirección coincide están en tu conexión a internet, en cualquiera de tus redes
+WiFi, mientras el resto de internet queda rechazado.
+
+Riesgos de la opción 3, y cómo HA Guest los limita:
+
+- **El panel de invitados queda alcanzable desde internet.** A todos los demás se los rechaza por su dirección, y
+  cada solicitud igual necesita un enlace válido, rige el límite de acciones y solo intervienen las rutas del panel
+  de invitados, pero queda más expuesto que un panel que solo existe en tu red.
+- **IP públicas compartidas (CGNAT).** Algunos proveedores dan una misma IP pública a muchos clientes, así que un
+  desconocido puede tener tu dirección. Por eso, por esta vía, siempre se exige un enlace válido, aunque la duración
+  de los enlaces sea 0.
+- **Direcciones falsificadas.** Home Assistant solo toma la dirección del visitante desde `X-Forwarded-For` cuando la
+  solicitud viene de un proxy de confianza. Si `trusted_proxies` incluye algo de internet (como `0.0.0.0/0`),
+  cualquiera podría hacerse pasar por tu casa, así que HA Guest desactiva esta opción y el formulario la rechaza.
+- **No sirve con Home Assistant Cloud (Nabu Casa):** por ahí todo visitante aparece como `127.0.0.1`, así que el
+  panel de invitados siempre lo rechaza.
+- **Desde dentro de la casa**, abrir tu propio dominio puede llegar a Home Assistant a través del router («NAT
+  loopback»), y entonces se ve la dirección del router en vez de la pública. Un Cloudflare Tunnel lo evita. Si te
+  pasa, agrega la dirección del router a *Redes permitidas* o usa la opción 2.
+- **IPv6:** cada equipo tiene su propia dirección; cuenta como de la casa cualquier dirección del mismo /56 que la
+  que informa el sensor.
+
 ### Usar un dashboard
 
 En vez de una lista de entidades, en **Qué pueden manejar** puedes elegir **Un dashboard**: arma un dashboard
@@ -341,7 +400,9 @@ Lo que revisa el panel de invitados en cada solicitud, y lo que significa:
 
 - **Red:** solo entran direcciones de las redes permitidas. Home Assistant Cloud siempre se rechaza, y las cabeceras
   `X-Forwarded-For` o `Forwarded` falsas se ignoran salvo que vengan de un proxy que pusiste en `trusted_proxies`.
-  Nunca agregues a las redes permitidas la red interna de tu proxy inverso o de Docker.
+  Nunca agregues a las redes permitidas la red interna de tu proxy inverso o de Docker. Con **Permitir también la
+  IP pública de la casa**, también entran los invitados en tu conexión a internet, siempre con un enlace válido
+  (ver «Cuando el WiFi de invitados está aislado de tu red»).
 - **Enlace:** con una duración mayor que 0 (12 horas por defecto), un enlace sirve solo hasta que vence. Un QR
   viejo, un enlace con la fecha cambiada o uno inventado se rechazan; la firma es de 128 bits. **Con 0 no se pide
   enlace: cualquiera conectado a las redes permitidas entra, incluso con un QR viejo.**

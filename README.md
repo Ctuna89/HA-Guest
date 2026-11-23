@@ -65,6 +65,62 @@ Guests open `http://<home-assistant-ip>:8123/guest`. The easiest way is to leave
 From any other network the page only shows «Connect to the home Wi-Fi» along with the IP address Home Assistant
 sees, which helps when adjusting the allowed networks.
 
+### When the guest Wi-Fi is isolated from your home network
+
+Many routers keep the guest Wi-Fi apart from the home network, so a guest's phone cannot reach
+`http://<home-assistant-ip>:8123`: the page simply does not load. There are three ways around it. Each one opens a
+little more than the default, so pick the first one that works for you.
+
+**1. Let the guest network reach the home network** (router setting). Then add the guest network to *Allowed
+networks*. Simplest, but guests can then also reach the other devices in your home.
+
+**2. A reverse proxy that only exposes the guest panel** (what most people want). Run a proxy that guests can reach
+(on the router, a NAS or another device) and forward only these paths to Home Assistant: `/guest`,
+`/api/ha_guest/`, `/ha_guest_static/` (and `/local/` if your background photo is there). Then:
+
+- set **Guest address** in the guest panel settings to the proxy's address, so links and QR codes point to it;
+- in Home Assistant's `http:` settings, enable `use_x_forwarded_for` and list **only the proxy's own address** in
+  `trusted_proxies`;
+- add the guest network to *Allowed networks* (the proxy passes on each guest's own address).
+
+```nginx
+server {
+  listen 8124;  # reachable from the guest Wi-Fi
+  location ~ ^/(guest$|api/ha_guest/|ha_guest_static/) {
+    proxy_pass http://192.168.1.10:8123;  # Home Assistant
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_http_version 1.1;
+    proxy_buffering off;  # live updates
+  }
+  location / { return 404; }  # nothing else of Home Assistant
+}
+```
+
+**3. Your own domain plus the home's public address.** If Home Assistant is already reachable through your own
+domain (a Cloudflare Tunnel or a reverse proxy with port forwarding), set **Guest address** to that domain and
+choose a sensor with your home's public IP under **Also allow the home's public address** (the DNS IP integration
+provides one). Guests whose address matches are on your internet connection, whichever of your Wi-Fi networks they
+use, while the rest of the internet is refused.
+
+Risks of option 3, and how HA Guest limits them:
+
+- **The guest panel becomes reachable from the internet.** Everyone else is refused by address, and every request
+  still needs a valid link, rate limits apply, and only the guest panel's paths are involved, but it is more
+  exposed than a panel that only exists on your home network.
+- **Shared public addresses (CGNAT).** Some providers give one public IP to many customers, so strangers can have
+  your address. That is why, this way, a valid link is always required, even with a link duration of 0.
+- **Forged addresses.** Home Assistant only takes a visitor's address from `X-Forwarded-For` when the request comes
+  from a trusted proxy. If `trusted_proxies` includes anything on the internet (such as `0.0.0.0/0`), anyone could
+  claim to be your home, so HA Guest switches this option off and the settings form refuses it.
+- **Home Assistant Cloud (Nabu Casa) cannot be used for this**: through it every visitor looks like `127.0.0.1`,
+  so the guest panel always refuses it.
+- **From inside the house**, opening your own domain may reach Home Assistant through the router («hairpin NAT»),
+  which can show the router's address instead of the public one. A Cloudflare Tunnel avoids that. If it happens,
+  add the router's address to *Allowed networks* or use option 2.
+- **IPv6:** every device has its own address; any address in the same /56 as the one the sensor reports counts as
+  the home's.
+
 ### Using a dashboard
 
 Instead of a list of entities, **What guests can control** can be **A dashboard**: build a normal Home Assistant
@@ -333,7 +389,9 @@ What the guest panel checks on every request, and what that means:
 
 - **Network:** only addresses in the allowed networks get in. Home Assistant Cloud is always refused, and forged
   `X-Forwarded-For` or `Forwarded` headers are ignored unless they come from a proxy you listed in `trusted_proxies`.
-  Never add your reverse proxy's or Docker's internal network to the allowed networks.
+  Never add your reverse proxy's or Docker's internal network to the allowed networks. With **Also allow the
+  home's public address**, guests on your internet connection get in too, always with a valid link (see «When the
+  guest Wi-Fi is isolated from your home network»).
 - **Link:** with a link duration above 0 (12 hours by default), a link only works until it expires. An old QR code,
   a link with its date changed, or a made-up one is refused; the signature is 128 bits. **With 0, no link is needed
   at all: anyone on the allowed networks gets in, even with an old QR code.**
