@@ -24,6 +24,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 
 from .const import (
+    CONF_GUEST_URL,
     ICON_URL,
     CONF_CODES,
     CONF_DAYS,
@@ -162,7 +163,11 @@ def token_expiry(secret: str, token: Any, lifetime: int, now: float | None = Non
 
 
 def _base_url(hass: HomeAssistant) -> str:
-    """The address guests use: always the local one, never the remote or cloud address."""
+    """The address in guests' links and QR codes: the owner's «guest address» if set (a reverse proxy, their own
+    domain), else Home Assistant's local one; never its cloud address."""
+    for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+        if guest_url := entry.options.get(CONF_PANEL, {}).get(CONF_GUEST_URL):
+            return str(guest_url).rstrip("/")
     try:
         return get_url(hass, allow_external=False, allow_cloud=False)
     except NoURLAvailableError:

@@ -11,21 +11,28 @@
           "source": "Qué pueden manejar",
           "entities": "Entidades que pueden manejar",
           "dashboard": "Dashboard",
-          "link_hours": "Duración del enlace de invitados"
+          "link_hours": "Duración del enlace de invitados",
+          "guest_url": "Dirección para invitados (opcional)",
+          "public_ip_entity": "Permitir también la IP pública de la casa (opcional)"
         },
         "data_description": {
           "networks": "La red de tu WiFi en formato CIDR, por ejemplo 192.168.1.0/24. Puedes agregar varias.",
           "entities": "Si eliges «Una lista de entidades». Los sensores se muestran como solo lectura.",
           "link_hours": "Horas que sirve cada enlace o código QR. Al vencer, el invitado debe escanear un código nuevo. Los códigos se crean en «Guest QR», en la barra lateral. Con 0 no se pide enlace: cualquiera conectado a las redes permitidas entra, incluso con un QR viejo.",
           "source": "Una lista de entidades, o todas las entidades de un dashboard que armes para los invitados.",
-          "dashboard": "Si eliges «Un dashboard». Los invitados ven sus entidades con los títulos, el orden, los nombres y los iconos de sus tarjetas, y solo pueden usar esas. Cuando cambias el dashboard, el panel cambia solo."
+          "dashboard": "Si eliges «Un dashboard». Los invitados ven sus entidades con los títulos, el orden, los nombres y los iconos de sus tarjetas, y solo pueden usar esas. Cuando cambias el dashboard, el panel cambia solo.",
+          "guest_url": "La dirección de los enlaces y QR cuando los invitados no llegan a la de Home Assistant, por ejemplo porque el WiFi de invitados está aislado: un proxy inverso que solo expone el panel de invitados, o tu propio dominio. Solo protocolo y servidor, por ejemplo https://invitados.ejemplo.cl. Vacío usa la dirección local de Home Assistant.",
+          "public_ip_entity": "Un sensor con la IP pública de tu casa, por ejemplo el de la integración DNS IP. Los invitados cuya dirección coincide están en tu conexión a internet (cualquiera de tus redes WiFi) aunque entren por tu dominio o túnel. RIESGOS: nunca funciona por Home Assistant Cloud (Nabu Casa no entrega la dirección del visitante); si tu proveedor comparte una IP pública entre muchos clientes (CGNAT), desconocidos tienen la misma dirección, por eso por esta vía siempre se exige un enlace válido; úsalo solo con un proxy inverso o túnel incluido en trusted_proxies."
         }
       }
     },
     "error": {
       "invalid_network": "Hay una red que no es válida. Usa el formato 192.168.1.0/24.",
       "no_dashboard": "Elige un dashboard.",
-      "dashboard_empty": "Ese dashboard no tiene tarjetas con entidades. El dashboard «Resumen» generado automáticamente no sirve hasta que lo edites; mejor crea uno para invitados."
+      "dashboard_empty": "Ese dashboard no tiene tarjetas con entidades. El dashboard «Resumen» generado automáticamente no sirve hasta que lo edites; mejor crea uno para invitados.",
+      "invalid_guest_url": "Usa solo protocolo y servidor, por ejemplo https://invitados.ejemplo.cl.",
+      "not_public_ip": "Ese sensor no tiene una IP pública en este momento.",
+      "unsafe_proxies": "Tu ajuste trusted_proxies incluye direcciones de internet, así que cualquiera podría falsificar su dirección. Limítalo a tu proxy o túnel antes de usar esta opción."
     },
     "abort": {
       "single_instance_allowed": "Ya está configurada."
@@ -56,14 +63,18 @@
           "source": "Qué pueden manejar",
           "entities": "Entidades que pueden manejar",
           "dashboard": "Dashboard",
-          "link_hours": "Duración del enlace de invitados"
+          "link_hours": "Duración del enlace de invitados",
+          "guest_url": "Dirección para invitados (opcional)",
+          "public_ip_entity": "Permitir también la IP pública de la casa (opcional)"
         },
         "data_description": {
           "networks": "La red de tu WiFi en formato CIDR, por ejemplo 192.168.1.0/24. Puedes agregar varias.",
           "entities": "Si eliges «Una lista de entidades». Los sensores se muestran como solo lectura.",
           "link_hours": "Horas que sirve cada enlace o código QR. Al vencer, el invitado debe escanear un código nuevo. Los códigos se crean en «Guest QR», en la barra lateral. Con 0 no se pide enlace: cualquiera conectado a las redes permitidas entra, incluso con un QR viejo.",
           "source": "Una lista de entidades, o todas las entidades de un dashboard que armes para los invitados.",
-          "dashboard": "Si eliges «Un dashboard». Los invitados ven sus entidades con los títulos, el orden, los nombres y los iconos de sus tarjetas, y solo pueden usar esas. Cuando cambias el dashboard, el panel cambia solo."
+          "dashboard": "Si eliges «Un dashboard». Los invitados ven sus entidades con los títulos, el orden, los nombres y los iconos de sus tarjetas, y solo pueden usar esas. Cuando cambias el dashboard, el panel cambia solo.",
+          "guest_url": "La dirección de los enlaces y QR cuando los invitados no llegan a la de Home Assistant, por ejemplo porque el WiFi de invitados está aislado: un proxy inverso que solo expone el panel de invitados, o tu propio dominio. Solo protocolo y servidor, por ejemplo https://invitados.ejemplo.cl. Vacío usa la dirección local de Home Assistant.",
+          "public_ip_entity": "Un sensor con la IP pública de tu casa, por ejemplo el de la integración DNS IP. Los invitados cuya dirección coincide están en tu conexión a internet (cualquiera de tus redes WiFi) aunque entren por tu dominio o túnel. RIESGOS: nunca funciona por Home Assistant Cloud (Nabu Casa no entrega la dirección del visitante); si tu proveedor comparte una IP pública entre muchos clientes (CGNAT), desconocidos tienen la misma dirección, por eso por esta vía siempre se exige un enlace válido; úsalo solo con un proxy inverso o túnel incluido en trusted_proxies."
         }
       },
       "add_user": {
@@ -205,7 +216,10 @@
       "layout_not_allowed": "El diseño usa entidades que no están en la lista del panel de invitados: {entity}",
       "no_dashboard": "Elige un dashboard.",
       "dashboard_empty": "Ese dashboard no tiene tarjetas con entidades. El dashboard «Resumen» generado automáticamente no sirve hasta que lo edites; mejor crea uno para invitados.",
-      "invalid_background": "Usa una dirección de Home Assistant como /local/fondo.jpg o una que empiece con https://."
+      "invalid_background": "Usa una dirección de Home Assistant como /local/fondo.jpg o una que empiece con https://.",
+      "invalid_guest_url": "Usa solo protocolo y servidor, por ejemplo https://invitados.ejemplo.cl.",
+      "not_public_ip": "Ese sensor no tiene una IP pública en este momento.",
+      "unsafe_proxies": "Tu ajuste trusted_proxies incluye direcciones de internet, así que cualquiera podría falsificar su dirección. Limítalo a tu proxy o túnel antes de usar esta opción."
     },
     "abort": {
       "no_users": "No hay usuarios para restringir. Crea primero un usuario que no sea administrador en Ajustes → Personas.",

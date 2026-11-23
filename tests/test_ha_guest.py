@@ -1107,3 +1107,69 @@ async def test_states_in_the_guests_language(hass, hass_client_no_auth):
     assert await label() == "Inactivo"  # Home Assistant's language
     assert await label("?lang=de") == "Leerlauf"
     assert await label("?lang=not_a_language") == "Inactivo"
+
+
+
+async def _behind_proxy(hass, trusted="127.0.0.1"):
+    """Home Assistant behind a reverse proxy or tunnel: the visitor's address comes from X-Forwarded-For."""
+    assert await async_setup_component(
+        hass, "http", {"http": {"use_x_forwarded_for": True, "trusted_proxies": [trusted]}}
+    )
+
+
+async def test_home_public_address(hass, hass_client_no_auth, hass_ws_client):
+    """Guests on the home's internet connection (an isolated guest Wi-Fi) reaching it through the owner's domain."""
+    await _behind_proxy(hass)
+    hass.states.async_set("sensor.myip", "81.2.69.160")
+    entry = await _setup(hass, panel={"networks": ["192.168.1.0/24"], "link_hours": 0,
+                                      "public_ip_entity": "sensor.myip", "guest_url": "https://guests.example.com"})
+    http = await hass_client_no_auth()
+    home = {"X-Forwarded-For": "81.2.69.160"}
+
+    async def get(headers):
+        res = await http.get("/api/ha_guest/states", headers=headers)
+        return res.status, (await res.json()).get("error")
+
+    # From the home's public address a link is required even with a link duration of 0.
+    assert await get(home) == (403, "link")
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": "ha_guest/invitations/create", "name": "Ana", "hours": 2})
+    invitation = (await ws.receive_json())["result"]["invitations"][0]
+    assert invitation["url"].startswith("https://guests.example.com/guest?t=i.")
+    token = {"X-Guest-Token": invitation["url"].split("?t=")[1]}
+    assert await get({**home, **token}) == (200, None)
+    # The guest address is accepted as the page's host.
+    assert await get({**home, **token, "Host": "guests.example.com"}) == (200, None)
+
+    # Anyone else on the internet, even with the link.
+    assert await get({"X-Forwarded-For": "94.142.241.9", **token}) == (403, "network")
+    # The home's address changes: the sensor follows, and the old one no longer counts.
+    hass.states.async_set("sensor.myip", "81.2.69.99")
+    assert await get({**home, **token}) == (403, "network")
+    hass.states.async_set("sensor.myip", "unavailable")
+    assert await get({"X-Forwarded-For": "81.2.69.99", **token}) == (403, "network")
+
+    # IPv6: any address in the home's /56.
+    hass.states.async_set("sensor.myip", "2a02:1234:abcd:1200::1")
+    assert await get({"X-Forwarded-For": "2a02:1234:abcd:12ff::42", **token}) == (200, None)
+    assert await get({"X-Forwarded-For": "2a02:1234:abcd:1300::42", **token}) == (403, "network")
+
+
+async def test_public_address_refused_with_unsafe_proxies(hass, hass_client_no_auth):
+    """If any address on the internet is a «trusted proxy», anyone can forge X-Forwarded-For: the option is off."""
+    await _behind_proxy(hass, trusted="0.0.0.0/0")
+    hass.states.async_set("sensor.myip", "81.2.69.160")
+    await _setup(hass, panel={"networks": ["192.168.1.0/24"], "public_ip_entity": "sensor.myip"})
+    http = await hass_client_no_auth()
+    res = await http.get("/api/ha_guest/states", headers={"X-Forwarded-For": "81.2.69.160"})
+    assert (await res.json())["error"] == "network"
+
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "panel"})
+    form = {**entry.options["panel"], "guest_url": "https://guests.example.com/some/path"}
+    result = await hass.config_entries.options.async_configure(result["flow_id"], form)
+    assert result["errors"] == {"guest_url": "invalid_guest_url", "public_ip_entity": "unsafe_proxies"}
+    hass.states.async_set("sensor.myip", "192.168.1.1")
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {**form, "guest_url": "https://g.example.com"})
+    assert result["errors"] == {"public_ip_entity": "not_public_ip"}

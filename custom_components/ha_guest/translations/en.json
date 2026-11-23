@@ -11,21 +11,28 @@
           "source": "What guests can control",
           "entities": "Entities guests can control",
           "dashboard": "Dashboard",
-          "link_hours": "Guest link duration"
+          "link_hours": "Guest link duration",
+          "guest_url": "Guest address (optional)",
+          "public_ip_entity": "Also allow the home's public address (optional)"
         },
         "data_description": {
           "networks": "Your Wi-Fi network in CIDR format, for example 192.168.1.0/24. You can add several.",
           "entities": "When «A list of entities» is chosen. Sensors are shown read-only.",
           "link_hours": "Hours each link or QR code works for. Once it expires, the guest has to scan a new code. Codes are created under «Guest QR» in the sidebar. With 0 no link is required: anyone on the allowed networks gets in, even with an old QR code.",
           "source": "A list of entities, or every entity on a dashboard you build for guests.",
-          "dashboard": "When «A dashboard» is chosen. Guests see its entities with its cards' titles, order, names and icons, and can only use those. When you change the dashboard, the panel follows."
+          "dashboard": "When «A dashboard» is chosen. Guests see its entities with its cards' titles, order, names and icons, and can only use those. When you change the dashboard, the panel follows.",
+          "guest_url": "The address in links and QR codes when guests cannot reach Home Assistant's own, for example because the guest Wi-Fi is isolated: a reverse proxy that only exposes the guest panel, or your own domain. Only scheme and host, for example https://guests.example.com. Leave empty to use Home Assistant's local address.",
+          "public_ip_entity": "A sensor with your home's public IP, for example from the DNS IP integration. Guests whose address matches it are on your internet connection (any of your Wi-Fi networks) even when they come in through your domain or tunnel. RISKS: it never works through Home Assistant Cloud (Nabu Casa does not pass the visitor's address); if your provider shares one public IP among many customers (CGNAT), strangers have the same address, so a valid link is always required this way; only use it with a reverse proxy or tunnel listed in trusted_proxies."
         }
       }
     },
     "error": {
       "invalid_network": "One of the networks is not valid. Use the format 192.168.1.0/24.",
       "no_dashboard": "Choose a dashboard.",
-      "dashboard_empty": "That dashboard has no cards with entities. The auto-generated «Overview» dashboard does not count until you edit it; better create one for guests."
+      "dashboard_empty": "That dashboard has no cards with entities. The auto-generated «Overview» dashboard does not count until you edit it; better create one for guests.",
+      "invalid_guest_url": "Use only scheme and host, for example https://guests.example.com.",
+      "not_public_ip": "That sensor does not hold a public IP address right now.",
+      "unsafe_proxies": "Your trusted_proxies setting includes addresses on the internet, so anyone could fake their address. Limit it to your proxy or tunnel before using this option."
     },
     "abort": {
       "single_instance_allowed": "Already configured."
@@ -56,14 +63,18 @@
           "source": "What guests can control",
           "entities": "Entities guests can control",
           "dashboard": "Dashboard",
-          "link_hours": "Guest link duration"
+          "link_hours": "Guest link duration",
+          "guest_url": "Guest address (optional)",
+          "public_ip_entity": "Also allow the home's public address (optional)"
         },
         "data_description": {
           "networks": "Your Wi-Fi network in CIDR format, for example 192.168.1.0/24. You can add several.",
           "entities": "When «A list of entities» is chosen. Sensors are shown read-only.",
           "link_hours": "Hours each link or QR code works for. Once it expires, the guest has to scan a new code. Codes are created under «Guest QR» in the sidebar. With 0 no link is required: anyone on the allowed networks gets in, even with an old QR code.",
           "source": "A list of entities, or every entity on a dashboard you build for guests.",
-          "dashboard": "When «A dashboard» is chosen. Guests see its entities with its cards' titles, order, names and icons, and can only use those. When you change the dashboard, the panel follows."
+          "dashboard": "When «A dashboard» is chosen. Guests see its entities with its cards' titles, order, names and icons, and can only use those. When you change the dashboard, the panel follows.",
+          "guest_url": "The address in links and QR codes when guests cannot reach Home Assistant's own, for example because the guest Wi-Fi is isolated: a reverse proxy that only exposes the guest panel, or your own domain. Only scheme and host, for example https://guests.example.com. Leave empty to use Home Assistant's local address.",
+          "public_ip_entity": "A sensor with your home's public IP, for example from the DNS IP integration. Guests whose address matches it are on your internet connection (any of your Wi-Fi networks) even when they come in through your domain or tunnel. RISKS: it never works through Home Assistant Cloud (Nabu Casa does not pass the visitor's address); if your provider shares one public IP among many customers (CGNAT), strangers have the same address, so a valid link is always required this way; only use it with a reverse proxy or tunnel listed in trusted_proxies."
         }
       },
       "add_user": {
@@ -205,7 +216,10 @@
       "layout_not_allowed": "The layout uses entities that are not on the guest panel's list: {entity}",
       "no_dashboard": "Choose a dashboard.",
       "dashboard_empty": "That dashboard has no cards with entities. The auto-generated «Overview» dashboard does not count until you edit it; better create one for guests.",
-      "invalid_background": "Use a Home Assistant address such as /local/background.jpg, or one starting with https://."
+      "invalid_background": "Use a Home Assistant address such as /local/background.jpg, or one starting with https://.",
+      "invalid_guest_url": "Use only scheme and host, for example https://guests.example.com.",
+      "not_public_ip": "That sensor does not hold a public IP address right now.",
+      "unsafe_proxies": "Your trusted_proxies setting includes addresses on the internet, so anyone could fake their address. Limit it to your proxy or tunnel before using this option."
     },
     "abort": {
       "no_users": "There are no users to restrict. First create a non-administrator user in Settings → People.",
